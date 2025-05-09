@@ -78,22 +78,27 @@
       color: #333;
       text-align: center;
       z-index: 10;
-      pointer-events: auto; /* 允许点击交互 */
+      pointer-events: auto;
+      /* 允许点击交互 */
       /* Allow map interaction underneath if ever needed, though hidden when track loaded */
       display: none;
       /* Hidden by default */
       box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-      cursor: pointer; /* 鼠标悬停时显示指针 */
-      transition: background-color 0.2s, transform 0.1s; /* 平滑过渡效果 */
+      cursor: pointer;
+      /* 鼠标悬停时显示指针 */
+      transition: background-color 0.2s, transform 0.1s;
+      /* 平滑过渡效果 */
     }
 
     .drop-prompt:hover {
       background-color: rgba(255, 255, 255, 1);
-      transform: translate(-50%, -50%) scale(1.02); /* 轻微放大效果 */
+      transform: translate(-50%, -50%) scale(1.02);
+      /* 轻微放大效果 */
     }
 
     .drop-prompt:active {
-      transform: translate(-50%, -50%) scale(0.98); /* 点击时缩小效果 */
+      transform: translate(-50%, -50%) scale(0.98);
+      /* 点击时缩小效果 */
     }
 
     /* Show prompt when no track is loaded */
@@ -134,69 +139,69 @@
     const timestampDisplay = document.getElementById('timestamp-display');
     const mapContainer = document.getElementById('map');
     const dropPromptMessage = document.getElementById('drop-prompt-message');
-      const fileInput = document.getElementById('file-input');
+    const fileInput = document.getElementById('file-input');
 
-      // 添加提示框点击事件
-      dropPromptMessage.addEventListener('click', () => {
-        fileInput.click();
-      });
+    // 添加提示框点击事件
+    dropPromptMessage.addEventListener('click', () => {
+      fileInput.click();
+    });
 
-      // 添加文件选择事件处理
-      fileInput.addEventListener('change', (event) => {
-        if (event.target.files && event.target.files.length > 0) {
-          const file = event.target.files[0];
-          processSelectedFile(file);
-        }
-      });
+    // 添加文件选择事件处理
+    fileInput.addEventListener('change', (event) => {
+      if (event.target.files && event.target.files.length > 0) {
+        const file = event.target.files[0];
+        processSelectedFile(file);
+      }
+    });
 
-      // 处理选择的GPX文件
-      function processSelectedFile(file) {
-        if (file.name.toLowerCase().endsWith('.gpx')) {
-          dropPromptMessage.textContent = "正在处理 GPX 文件..."; // 处理反馈
+    // 处理选择的GPX文件
+    function processSelectedFile(file) {
+      if (file.name.toLowerCase().endsWith('.gpx')) {
+        dropPromptMessage.textContent = "正在处理 GPX 文件..."; // 处理反馈
 
-          const reader = new FileReader();
-          reader.onload = (e) => {
-            try {
-              const gpxString = e.target.result;
-              const newRawData = parseGPXToRawTrackData(gpxString);
-              if (newRawData !== null) { // 检查null表示解析错误
-                loadTrackDataOnMap(newRawData); // newRawData可以是[]
-              } else {
-                // parseGPXToRawTrackData已经提示了错误
-                timestampDisplay.textContent = "GPX 解析失败";
-                slider.disabled = true;
-                mapContainer.classList.add('no-track');
-                dropPromptMessage.textContent = "GPX 解析失败，请检查文件并重试\n或点击此处选择另一个文件";
-              }
-            } catch (error) {
-              console.error("处理 GPX 文件时出错:", error);
-              alert("处理 GPX 文件时发生意外错误: " + error.message);
-              timestampDisplay.textContent = "GPX 加载异常";
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          try {
+            const gpxString = e.target.result;
+            const newRawData = parseGPXToRawTrackData(gpxString);
+            if (newRawData !== null) { // 检查null表示解析错误
+              loadTrackDataOnMap(newRawData); // newRawData可以是[]
+            } else {
+              // parseGPXToRawTrackData已经提示了错误
+              timestampDisplay.textContent = "GPX 解析失败";
               slider.disabled = true;
               mapContainer.classList.add('no-track');
-              dropPromptMessage.textContent = "GPX 加载异常，请重试\n或点击此处选择另一个文件";
+              dropPromptMessage.textContent = "GPX 解析失败，请检查文件并重试\n或点击此处选择另一个文件";
             }
-          };
-          reader.onerror = (e) => {
-            console.error("读取文件失败:", e);
-            alert("读取文件失败。请检查浏览器权限或文件本身。");
-            timestampDisplay.textContent = "文件读取错误";
+          } catch (error) {
+            console.error("处理 GPX 文件时出错:", error);
+            alert("处理 GPX 文件时发生意外错误: " + error.message);
+            timestampDisplay.textContent = "GPX 加载异常";
             slider.disabled = true;
             mapContainer.classList.add('no-track');
-            dropPromptMessage.textContent = "文件读取错误，请重试\n或点击此处选择另一个文件";
-          };
-          reader.readAsText(file);
-        } else {
-          alert("请选择一个 .gpx 文件。");
-          dropPromptMessage.textContent = "非 GPX 文件，请选择或拖放 .gpx 文件";
-          // 如果之前没有轨迹，保持'no-track'状态，否则设置默认提示
-          setTimeout(() => { // 延迟后恢复消息
-            if (currentPoints.length === 0) dropPromptMessage.textContent = "请拖放 GPX 文件到地图区域\n或点击此处选择文件";
-          }, 2000);
-        }
-        // 重置文件输入，以便重复选择同一个文件
-        fileInput.value = '';
+            dropPromptMessage.textContent = "GPX 加载异常，请重试\n或点击此处选择另一个文件";
+          }
+        };
+        reader.onerror = (e) => {
+          console.error("读取文件失败:", e);
+          alert("读取文件失败。请检查浏览器权限或文件本身。");
+          timestampDisplay.textContent = "文件读取错误";
+          slider.disabled = true;
+          mapContainer.classList.add('no-track');
+          dropPromptMessage.textContent = "文件读取错误，请重试\n或点击此处选择另一个文件";
+        };
+        reader.readAsText(file);
+      } else {
+        alert("请选择一个 .gpx 文件。");
+        dropPromptMessage.textContent = "非 GPX 文件，请选择或拖放 .gpx 文件";
+        // 如果之前没有轨迹，保持'no-track'状态，否则设置默认提示
+        setTimeout(() => { // 延迟后恢复消息
+          if (currentPoints.length === 0) dropPromptMessage.textContent = "请拖放 GPX 文件到地图区域\n或点击此处选择文件";
+        }, 2000);
       }
+      // 重置文件输入，以便重复选择同一个文件
+      fileInput.value = '';
+    }
 
     // 1. 数据处理函数 (Converts raw data to GeoJSON and structured points)
     function processTrackData(rawData) {
@@ -438,7 +443,7 @@
         source: 'travelled-track',
         layout: { 'line-join': 'round', 'line-cap': 'round' },
         paint: { 'line-color': '#28a745', 'line-width': 6, 'line-opacity': 0.9 }
-      }, 'full-track-line'); // Ensure this layer is above the full track
+      },); // Ensure this layer is above the full track
 
       // 添加当前位置标记的数据源和图层 (initially no features)
       map.addSource('current-point', {
