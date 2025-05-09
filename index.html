@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8" />
+  <title>GPX 轨迹可视化 (拖放加载)</title>
+  <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <link href="https://unpkg.com/maplibre-gl@4.1.0/dist/maplibre-gl.css" rel="stylesheet" />
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+    }
+
+    #map {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 100%;
+      background-color: #f0f0f0;
+      /* Default background for map area */
+    }
+
+    .controls {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(255, 255, 255, 0.9);
+      /* Slightly more opaque */
+      padding: 10px 20px;
+      border-radius: 8px;
+      /* Softer corners */
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      /* Enhanced shadow */
+    }
+
+    .controls label {
+      font-family: sans-serif;
+      font-size: 14px;
+    }
+
+    #timeslider {
+      width: 300px;
+    }
+
+    #timestamp-display {
+      font-family: monospace;
+      font-size: 13px;
+      min-width: 180px;
+      /* 保证足够宽度显示时间 */
+      padding: 5px;
+      background-color: #f8f9fa;
+      border-radius: 4px;
+    }
+
+    /* Style for drag-over effect */
+    #map.dragover {
+      border: 3px dashed #007bff;
+      box-shadow: inset 0 0 30px rgba(0, 123, 255, 0.3);
+    }
+
+    .drop-prompt {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background-color: rgba(255, 255, 255, 0.95);
+      padding: 25px 30px;
+      border-radius: 10px;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      /* Modern font */
+      font-size: 1.3em;
+      color: #333;
+      text-align: center;
+      z-index: 10;
+      pointer-events: auto; /* 允许点击交互 */
+      /* Allow map interaction underneath if ever needed, though hidden when track loaded */
+      display: none;
+      /* Hidden by default */
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+      cursor: pointer; /* 鼠标悬停时显示指针 */
+      transition: background-color 0.2s, transform 0.1s; /* 平滑过渡效果 */
+    }
+
+    .drop-prompt:hover {
+      background-color: rgba(255, 255, 255, 1);
+      transform: translate(-50%, -50%) scale(1.02); /* 轻微放大效果 */
+    }
+
+    .drop-prompt:active {
+      transform: translate(-50%, -50%) scale(0.98); /* 点击时缩小效果 */
+    }
+
+    /* Show prompt when no track is loaded */
+    #map.no-track .drop-prompt {
+      display: block;
+    }
+
+    /* 隐藏文件输入框 */
+    #file-input {
+      display: none;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div id="map">
+    <!-- This div will show a message prompting user to drop a file -->
+    <div class="drop-prompt" id="drop-prompt-message">请拖放 GPX 文件到地图区域<br>或点击此处选择文件</div>
+  </div>
+  <div class="controls">
+    <label for="timeslider">轨迹进度:</label>
+    <input type="range" id="timeslider" min="0" value="0" step="1" disabled />
+    <div id="timestamp-display">未加载数据</div>
+  </div>
+  <!-- 添加隐藏的文件输入框 -->
+  <input type="file" id="file-input" accept=".gpx" />
+
+  <script src="https://unpkg.com/maplibre-gl@4.1.0/dist/maplibre-gl.js"></script>
+  <script>
+    // Global map instance
+    let map;
+    // Global track data, initialized as empty
+    let currentPoints = [];
+    let currentFullTrackGeoJSON = { type: 'Feature', geometry: { type: 'LineString', coordinates: [] }, properties: {} };
+
+    const slider = document.getElementById('timeslider');
+    const timestampDisplay = document.getElementById('timestamp-display');
+    const mapContainer = document.getElementById('map');
+    const dropPromptMessage = document.getElementById('drop-prompt-message');
+      const fileInput = document.getElementById('file-input');
+
+      // 添加提示框点击事件
+      dropPromptMessage.addEventListener('click', () => {
+        fileInput.click();
+      });
+
+      // 添加文件选择事件处理
+      fileInput.addEventListener('change', (event) => {
+        if (event.target.files && event.target.files.length > 0) {
+          const file = event.target.files[0];
+          processSelectedFile(file);
+        }
+      });
+
+      // 处理选择的GPX文件
+      function processSelectedFile(file) {
+        if (file.name.toLowerCase().endsWith('.gpx')) {
+          dropPromptMessage.textContent = "正在处理 GPX 文件..."; // 处理反馈
+
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            try {
+              const gpxString = e.target.result;
+              const newRawData = parseGPXToRawTrackData(gpxString);
+              if (newRawData !== null) { // 检查null表示解析错误
+                loadTrackDataOnMap(newRawData); // newRawData可以是[]
+              } else {
+                // parseGPXToRawTrackData已经提示了错误
+                timestampDisplay.textContent = "GPX 解析失败";
+                slider.disabled = true;
+                mapContainer.classList.add('no-track');
+                dropPromptMessage.textContent = "GPX 解析失败，请检查文件并重试\n或点击此处选择另一个文件";
+              }
+            } catch (error) {
+              console.error("处理 GPX 文件时出错:", error);
+              alert("处理 GPX 文件时发生意外错误: " + error.message);
+              timestampDisplay.textContent = "GPX 加载异常";
+              slider.disabled = true;
+              mapContainer.classList.add('no-track');
+              dropPromptMessage.textContent = "GPX 加载异常，请重试\n或点击此处选择另一个文件";
+            }
+          };
+          reader.onerror = (e) => {
+            console.error("读取文件失败:", e);
+            alert("读取文件失败。请检查浏览器权限或文件本身。");
+            timestampDisplay.textContent = "文件读取错误";
+            slider.disabled = true;
+            mapContainer.classList.add('no-track');
+            dropPromptMessage.textContent = "文件读取错误，请重试\n或点击此处选择另一个文件";
+          };
+          reader.readAsText(file);
+        } else {
+          alert("请选择一个 .gpx 文件。");
+          dropPromptMessage.textContent = "非 GPX 文件，请选择或拖放 .gpx 文件";
+          // 如果之前没有轨迹，保持'no-track'状态，否则设置默认提示
+          setTimeout(() => { // 延迟后恢复消息
+            if (currentPoints.length === 0) dropPromptMessage.textContent = "请拖放 GPX 文件到地图区域\n或点击此处选择文件";
+          }, 2000);
+        }
+        // 重置文件输入，以便重复选择同一个文件
+        fileInput.value = '';
+      }
+
+    // 1. 数据处理函数 (Converts raw data to GeoJSON and structured points)
+    function processTrackData(rawData) {
+      if (!rawData || rawData.length === 0) {
+        return {
+          points: [],
+          fullTrackGeoJSON: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] }, properties: {} }
+        };
+      }
+      // Ensure points are sorted by timestamp, as GPX data might not always be.
+      const sortedRawData = rawData.sort((a, b) => a.timestamp - b.timestamp);
+
+      const points = sortedRawData.map(p => ({
+        longitude: p.longitude_scaled_1e5 / 1e5,
+        latitude: p.latitude_scaled_1e5 / 1e5,
+        altitude: p.altitude_m_scaled_1e1 / 1e1,
+        timestamp: p.timestamp
+      }));
+
+      const coordinates = points.map(p => [p.longitude, p.latitude, p.altitude]);
+      return {
+        points: points,
+        fullTrackGeoJSON: {
+          type: 'Feature',
+          geometry: { type: 'LineString', coordinates: coordinates },
+          properties: {}
+        }
+      };
+    }
+
+    // 2. GPX 解析和转换函数
+    function parseGPXToRawTrackData(gpxString) {
+      const parser = new DOMParser();
+      const xmlDoc = parser.parseFromString(gpxString, "text/xml");
+      const newRawData = [];
+
+      const parseError = xmlDoc.getElementsByTagName("parsererror");
+      if (parseError.length > 0) {
+        console.error("GPX parsing error:", parseError[0].textContent);
+        alert("GPX 文件解析失败。请检查文件格式。\n错误详情: " + parseError[0].textContent);
+        return null; // Indicates a parsing failure
+      }
+
+      // Look for track points within track segments: trk > trkseg > trkpt
+      // Or simply any trkpt if structure is flatter
+      const trkpts = xmlDoc.querySelectorAll('trkpt');
+      if (trkpts.length === 0) {
+        console.warn("GPX 文件中未找到 <trkpt> 元素。");
+        alert("GPX 文件中未找到有效的轨迹点 (<trkpt>)。");
+        return []; // Valid XML, but no track points
+      }
+
+      trkpts.forEach((trkpt, index) => {
+        const latAttr = trkpt.getAttribute('lat');
+        const lonAttr = trkpt.getAttribute('lon');
+
+        if (!latAttr || !lonAttr) {
+          console.warn(`Trackpoint ${index + 1} 缺少经纬度属性，将被跳过。`);
+          return; // Skips this iteration
+        }
+        const lat = parseFloat(latAttr);
+        const lon = parseFloat(lonAttr);
+
+        let ele = 0; // Default altitude if not present
+        const eleTag = trkpt.querySelector('ele');
+        if (eleTag && eleTag.textContent) {
+          ele = parseFloat(eleTag.textContent);
+        }
+
+        let time = null;
+        const timeTag = trkpt.querySelector('time');
+        if (timeTag && timeTag.textContent) {
+          time = Math.floor(new Date(timeTag.textContent).getTime() / 1000); // Unix timestamp in seconds
+        } else {
+          // If time is critical for your application, you might skip points without it.
+          // For this demo, we'll try to proceed, but it might affect slider functionality.
+          console.warn(`Trackpoint ${index + 1} (Lat: ${lat}, Lon: ${lon}) 缺少时间信息，将被跳过。`);
+          return; // Time is crucial for the slider and sorting
+        }
+
+        if (!isNaN(lat) && !isNaN(lon) && time !== null && !isNaN(time)) {
+          newRawData.push({
+            timestamp: time,
+            latitude_scaled_1e5: Math.round(lat * 1e5),
+            longitude_scaled_1e5: Math.round(lon * 1e5),
+            altitude_m_scaled_1e1: Math.round(ele * 1e1) // Handle potential NaN for ele if parsing fails
+          });
+        } else {
+          console.warn(`跳过无效的轨迹点数据: Lat=${lat}, Lon=${lon}, Time=${time}, Ele=${ele}`);
+        }
+      });
+
+      if (newRawData.length === 0 && trkpts.length > 0) {
+        alert("GPX 文件中的轨迹点均无效或缺少必要信息 (有效的经纬度、时间)。");
+      }
+      // Sorting is now done in processTrackData, but can be kept here too if preferred.
+      // newRawData.sort((a, b) => a.timestamp - b.timestamp);
+      return newRawData;
+    }
+
+    // 3. 更新地图上当前点和已行进轨迹的函数
+    function updateMapForIndex(index) {
+      if (!map.loaded() || !map.getSource('current-point') || !map.getSource('travelled-track')) {
+        console.warn("Map or sources not ready for updateMapForIndex");
+        return;
+      }
+      if (!currentPoints || currentPoints.length === 0 || index < 0 || index >= currentPoints.length) {
+        if (currentPoints && currentPoints.length === 0) {
+          timestampDisplay.textContent = "无轨迹数据";
+          map.getSource('current-point').setData({ type: 'FeatureCollection', features: [] });
+          map.getSource('travelled-track').setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: [] }, properties: {} });
+        }
+        return;
+      }
+
+      const currentPointData = currentPoints[index];
+      map.getSource('current-point').setData({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [currentPointData.longitude, currentPointData.latitude] },
+        properties: { timestamp: currentPointData.timestamp, altitude: currentPointData.altitude }
+      });
+
+      const travelledCoordinates = currentPoints.slice(0, index + 1).map(p => [p.longitude, p.latitude, p.altitude]);
+      map.getSource('travelled-track').setData({
+        type: 'Feature',
+        geometry: { type: 'LineString', coordinates: travelledCoordinates },
+        properties: {}
+      });
+
+      const date = new Date(currentPointData.timestamp * 1000);
+      timestampDisplay.textContent = `${date.toLocaleString()} (海拔: ${currentPointData.altitude.toFixed(1)}m)`;
+    }
+
+    // 4. 使用新的轨迹数据设置/更新地图
+    function loadTrackDataOnMap(newRawTrackData) {
+      const processed = processTrackData(newRawTrackData);
+      currentPoints = processed.points;
+      currentFullTrackGeoJSON = processed.fullTrackGeoJSON;
+
+      if (currentPoints.length === 0) {
+        timestampDisplay.textContent = "GPX 文件无有效轨迹数据";
+        slider.disabled = true;
+        slider.value = 0;
+        slider.max = 0;
+        mapContainer.classList.add('no-track');
+        dropPromptMessage.textContent = "GPX 无有效数据或解析失败，请重试\n或点击此处选择另一个文件";
+
+        if (map.getSource('full-track')) {
+          map.getSource('full-track').setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: [] }, properties: {} });
+        }
+        updateMapForIndex(0); // Clears current-point and travelled-track
+        return;
+      }
+
+      mapContainer.classList.remove('no-track'); // Hide prompt
+      slider.max = currentPoints.length - 1;
+      slider.value = 0;
+      slider.disabled = false;
+
+      map.getSource('full-track').setData(currentFullTrackGeoJSON);
+      updateMapForIndex(0); // Initialize to the first point
+
+      if (currentFullTrackGeoJSON.geometry.coordinates.length > 1) {
+        const bounds = new maplibregl.LngLatBounds();
+        currentFullTrackGeoJSON.geometry.coordinates.forEach(coord => {
+          bounds.extend(coord.slice(0, 2)); // LngLatBounds only needs [lng, lat]
+        });
+        map.fitBounds(bounds, { padding: 60 }); // Add some padding around the track
+      }
+    }
+
+    // 5. 文件拖放处理
+    function handleFileDrop(event) {
+      event.preventDefault();
+      event.stopPropagation();
+      mapContainer.classList.remove('dragover');
+      dropPromptMessage.textContent = "正在处理 GPX 文件..."; // Feedback
+
+      if (event.dataTransfer.files && event.dataTransfer.files.length > 0) {
+        const file = event.dataTransfer.files[0];
+        processSelectedFile(file);
+      } else {
+        if (currentPoints.length === 0) dropPromptMessage.textContent = "请拖放 GPX 文件到地图区域\n或点击此处选择文件";
+      }
+    }
+
+    function handleDragOver(event) {
+      event.preventDefault();
+      event.stopPropagation();
+      mapContainer.classList.add('dragover');
+      dropPromptMessage.textContent = "松开以加载 GPX 文件";
+    }
+
+    function handleDragLeave(event) {
+      event.preventDefault();
+      event.stopPropagation();
+      mapContainer.classList.remove('dragover');
+      // Reset prompt text based on whether a track is loaded
+      if (currentPoints.length === 0) {
+        dropPromptMessage.textContent = "请拖放 GPX 文件到地图区域\n或点击此处选择文件";
+      } else {
+        // If a track is loaded, the prompt is normally hidden.
+        // This state occurs if user drags out without dropping.
+      }
+    }
+
+    // 6. 初始化 MapLibre GL JS 地图
+    map = new maplibregl.Map({
+      container: 'map',
+      style: 'https://tiles.openfreemap.org/styles/liberty',
+      center: [139.767, 35.681], // Default center (e.g., Tokyo Station)
+      zoom: 5 // Default zoom, will be adjusted by fitBounds later
+    });
+
+    map.on('load', () => {
+      mapContainer.classList.add('no-track'); // Initially, no track is loaded
+
+      // 添加完整轨迹线数据源和图层 (initially empty)
+      map.addSource('full-track', {
+        type: 'geojson',
+        data: currentFullTrackGeoJSON // Use the global empty GeoJSON object
+      });
+      map.addLayer({
+        id: 'full-track-line',
+        type: 'line',
+        source: 'full-track',
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: { 'line-color': '#007bff', 'line-width': 5, 'line-opacity': 0.8 }
+      });
+
+      // 添加已行进轨迹的数据源和图层 (initially empty)
+      map.addSource('travelled-track', {
+        type: 'geojson',
+        data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] }, properties: {} }
+      });
+      map.addLayer({
+        id: 'travelled-track-line',
+        type: 'line',
+        source: 'travelled-track',
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: { 'line-color': '#28a745', 'line-width': 6, 'line-opacity': 0.9 }
+      }, 'full-track-line'); // Ensure this layer is above the full track
+
+      // 添加当前位置标记的数据源和图层 (initially no features)
+      map.addSource('current-point', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] } // Start with no point marker
+      });
+      map.addLayer({
+        id: 'current-point-marker',
+        type: 'circle',
+        source: 'current-point',
+        paint: {
+          'circle-radius': 8, 'circle-color': '#dc3545',
+          'circle-stroke-width': 2, 'circle-stroke-color': '#ffffff'
+        }
+      });
+
+      // 设置拖放事件监听器
+      mapContainer.addEventListener('dragover', handleDragOver);
+      mapContainer.addEventListener('dragleave', handleDragLeave);
+      mapContainer.addEventListener('drop', handleFileDrop);
+
+      // 初始化UI状态
+      timestampDisplay.textContent = "请拖放 GPX 文件";
+      slider.disabled = true;
+      slider.value = 0;
+      slider.max = 0; // Max for an empty range
+    });
+
+    // 7. 进度条监听 (global)
+    slider.addEventListener('input', (e) => {
+      const index = parseInt(e.target.value);
+      updateMapForIndex(index);
+    });
+
+    // 8. 地图错误处理 (global)
+    map.on('error', (e) => {
+      console.error('MapLibre GL JS Error:', e);
+      if (e.error && e.error.status === 403 && e.url && e.url.includes('openfreemap.org')) {
+        alert("无法加载 OpenFreeMap 瓦片。请检查网络连接或瓦片服务状态。有时瓦片服务可能会有速率限制或临时不可用。");
+      } else if (e.error) {
+        alert(`加载地图时出错: ${e.error.message || '未知错误'}`);
+      }
+    });
+  </script>
+</body>
+
+</html>
