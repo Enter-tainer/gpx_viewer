@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="utf-8" />
-  <title>GPX 轨迹可视化 (拖放加载)</title>
+  <title>GPX 轨迹可视化 (拖放加载) - 带方向箭头</title>
   <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
   <link href="https://unpkg.com/maplibre-gl@4.1.0/dist/maplibre-gl.css" rel="stylesheet" />
   <style>
@@ -80,7 +80,6 @@
       z-index: 10;
       pointer-events: auto;
       /* 允许点击交互 */
-      /* Allow map interaction underneath if ever needed, though hidden when track loaded */
       display: none;
       /* Hidden by default */
       box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
@@ -116,7 +115,6 @@
 <body>
 
   <div id="map">
-    <!-- This div will show a message prompting user to drop a file -->
     <div class="drop-prompt" id="drop-prompt-message">请拖放 GPX 文件到地图区域<br>或点击此处选择文件</div>
   </div>
   <div class="controls">
@@ -124,14 +122,11 @@
     <input type="range" id="timeslider" min="0" value="0" step="1" disabled />
     <div id="timestamp-display">未加载数据</div>
   </div>
-  <!-- 添加隐藏的文件输入框 -->
   <input type="file" id="file-input" accept=".gpx" />
 
   <script src="https://unpkg.com/maplibre-gl@4.1.0/dist/maplibre-gl.js"></script>
   <script>
-    // Global map instance
     let map;
-    // Global track data, initialized as empty
     let currentPoints = [];
     let currentFullTrackGeoJSON = { type: 'Feature', geometry: { type: 'LineString', coordinates: [] }, properties: {} };
 
@@ -141,33 +136,24 @@
     const dropPromptMessage = document.getElementById('drop-prompt-message');
     const fileInput = document.getElementById('file-input');
 
-    // 添加提示框点击事件
-    dropPromptMessage.addEventListener('click', () => {
-      fileInput.click();
-    });
-
-    // 添加文件选择事件处理
+    dropPromptMessage.addEventListener('click', () => fileInput.click());
     fileInput.addEventListener('change', (event) => {
       if (event.target.files && event.target.files.length > 0) {
-        const file = event.target.files[0];
-        processSelectedFile(file);
+        processSelectedFile(event.target.files[0]);
       }
     });
 
-    // 处理选择的GPX文件
     function processSelectedFile(file) {
       if (file.name.toLowerCase().endsWith('.gpx')) {
-        dropPromptMessage.textContent = "正在处理 GPX 文件..."; // 处理反馈
-
+        dropPromptMessage.textContent = "正在处理 GPX 文件...";
         const reader = new FileReader();
         reader.onload = (e) => {
           try {
             const gpxString = e.target.result;
             const newRawData = parseGPXToRawTrackData(gpxString);
-            if (newRawData !== null) { // 检查null表示解析错误
-              loadTrackDataOnMap(newRawData); // newRawData可以是[]
+            if (newRawData !== null) {
+              loadTrackDataOnMap(newRawData);
             } else {
-              // parseGPXToRawTrackData已经提示了错误
               timestampDisplay.textContent = "GPX 解析失败";
               slider.disabled = true;
               mapContainer.classList.add('no-track');
@@ -194,16 +180,13 @@
       } else {
         alert("请选择一个 .gpx 文件。");
         dropPromptMessage.textContent = "非 GPX 文件，请选择或拖放 .gpx 文件";
-        // 如果之前没有轨迹，保持'no-track'状态，否则设置默认提示
-        setTimeout(() => { // 延迟后恢复消息
+        setTimeout(() => {
           if (currentPoints.length === 0) dropPromptMessage.textContent = "请拖放 GPX 文件到地图区域\n或点击此处选择文件";
         }, 2000);
       }
-      // 重置文件输入，以便重复选择同一个文件
       fileInput.value = '';
     }
 
-    // 1. 数据处理函数 (Converts raw data to GeoJSON and structured points)
     function processTrackData(rawData) {
       if (!rawData || rawData.length === 0) {
         return {
@@ -211,16 +194,13 @@
           fullTrackGeoJSON: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] }, properties: {} }
         };
       }
-      // Ensure points are sorted by timestamp, as GPX data might not always be.
       const sortedRawData = rawData.sort((a, b) => a.timestamp - b.timestamp);
-
       const points = sortedRawData.map(p => ({
         longitude: p.longitude_scaled_1e5 / 1e5,
         latitude: p.latitude_scaled_1e5 / 1e5,
         altitude: p.altitude_m_scaled_1e1 / 1e1,
         timestamp: p.timestamp
       }));
-
       const coordinates = points.map(p => [p.longitude, p.latitude, p.altitude]);
       return {
         points: points,
@@ -232,77 +212,59 @@
       };
     }
 
-    // 2. GPX 解析和转换函数
     function parseGPXToRawTrackData(gpxString) {
       const parser = new DOMParser();
       const xmlDoc = parser.parseFromString(gpxString, "text/xml");
       const newRawData = [];
-
       const parseError = xmlDoc.getElementsByTagName("parsererror");
       if (parseError.length > 0) {
         console.error("GPX parsing error:", parseError[0].textContent);
         alert("GPX 文件解析失败。请检查文件格式。\n错误详情: " + parseError[0].textContent);
-        return null; // Indicates a parsing failure
+        return null;
       }
-
-      // Look for track points within track segments: trk > trkseg > trkpt
-      // Or simply any trkpt if structure is flatter
       const trkpts = xmlDoc.querySelectorAll('trkpt');
       if (trkpts.length === 0) {
         console.warn("GPX 文件中未找到 <trkpt> 元素。");
         alert("GPX 文件中未找到有效的轨迹点 (<trkpt>)。");
-        return []; // Valid XML, but no track points
+        return [];
       }
-
       trkpts.forEach((trkpt, index) => {
         const latAttr = trkpt.getAttribute('lat');
         const lonAttr = trkpt.getAttribute('lon');
-
         if (!latAttr || !lonAttr) {
           console.warn(`Trackpoint ${index + 1} 缺少经纬度属性，将被跳过。`);
-          return; // Skips this iteration
+          return;
         }
         const lat = parseFloat(latAttr);
         const lon = parseFloat(lonAttr);
-
-        let ele = 0; // Default altitude if not present
+        let ele = 0;
         const eleTag = trkpt.querySelector('ele');
-        if (eleTag && eleTag.textContent) {
-          ele = parseFloat(eleTag.textContent);
-        }
-
+        if (eleTag && eleTag.textContent) ele = parseFloat(eleTag.textContent);
         let time = null;
         const timeTag = trkpt.querySelector('time');
         if (timeTag && timeTag.textContent) {
-          time = Math.floor(new Date(timeTag.textContent).getTime() / 1000); // Unix timestamp in seconds
+          time = Math.floor(new Date(timeTag.textContent).getTime() / 1000);
         } else {
-          // If time is critical for your application, you might skip points without it.
-          // For this demo, we'll try to proceed, but it might affect slider functionality.
           console.warn(`Trackpoint ${index + 1} (Lat: ${lat}, Lon: ${lon}) 缺少时间信息，将被跳过。`);
-          return; // Time is crucial for the slider and sorting
+          return;
         }
-
         if (!isNaN(lat) && !isNaN(lon) && time !== null && !isNaN(time)) {
           newRawData.push({
             timestamp: time,
             latitude_scaled_1e5: Math.round(lat * 1e5),
             longitude_scaled_1e5: Math.round(lon * 1e5),
-            altitude_m_scaled_1e1: Math.round(ele * 1e1) // Handle potential NaN for ele if parsing fails
+            altitude_m_scaled_1e1: Math.round(ele * 1e1)
           });
         } else {
           console.warn(`跳过无效的轨迹点数据: Lat=${lat}, Lon=${lon}, Time=${time}, Ele=${ele}`);
         }
       });
-
       if (newRawData.length === 0 && trkpts.length > 0) {
         alert("GPX 文件中的轨迹点均无效或缺少必要信息 (有效的经纬度、时间)。");
       }
-      // Sorting is now done in processTrackData, but can be kept here too if preferred.
-      // newRawData.sort((a, b) => a.timestamp - b.timestamp);
       return newRawData;
     }
 
-    // 3. 更新地图上当前点和已行进轨迹的函数
     function updateMapForIndex(index) {
       if (!map.loaded() || !map.getSource('current-point') || !map.getSource('travelled-track')) {
         console.warn("Map or sources not ready for updateMapForIndex");
@@ -316,26 +278,106 @@
         }
         return;
       }
-
       const currentPointData = currentPoints[index];
       map.getSource('current-point').setData({
         type: 'Feature',
         geometry: { type: 'Point', coordinates: [currentPointData.longitude, currentPointData.latitude] },
         properties: { timestamp: currentPointData.timestamp, altitude: currentPointData.altitude }
       });
-
       const travelledCoordinates = currentPoints.slice(0, index + 1).map(p => [p.longitude, p.latitude, p.altitude]);
       map.getSource('travelled-track').setData({
         type: 'Feature',
         geometry: { type: 'LineString', coordinates: travelledCoordinates },
         properties: {}
       });
-
       const date = new Date(currentPointData.timestamp * 1000);
       timestampDisplay.textContent = `${date.toLocaleString()} (海拔: ${currentPointData.altitude.toFixed(1)}m)`;
     }
 
-    // 4. 使用新的轨迹数据设置/更新地图
+    // NEW: Function to calculate bearing between two points
+    function calculateBearing(lat1, lon1, lat2, lon2) {
+      const toRadians = Math.PI / 180;
+      const toDegrees = 180 / Math.PI;
+
+      const y = Math.sin((lon2 - lon1) * toRadians) * Math.cos(lat2 * toRadians);
+      const x = Math.cos(lat1 * toRadians) * Math.sin(lat2 * toRadians) -
+        Math.sin(lat1 * toRadians) * Math.cos(lat2 * toRadians) * Math.cos((lon2 - lon1) * toRadians);
+      let brng = Math.atan2(y, x) * toDegrees;
+      brng = (brng + 360) % 360; // Normalize to 0-360
+      return brng;
+    }
+
+    // Helper function to calculate distance between two lat/lon points (Haversine formula)
+    function calculateDistance(lat1, lon1, lat2, lon2) {
+      const R = 6371e3; // Earth radius in meters
+      const phi1 = lat1 * Math.PI / 180;
+      const phi2 = lat2 * Math.PI / 180;
+      const deltaPhi = (lat2 - lat1) * Math.PI / 180;
+      const deltaLambda = (lon2 - lon1) * Math.PI / 180;
+
+      const a = Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
+        Math.cos(phi1) * Math.cos(phi2) *
+        Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+      return R * c; // Distance in meters
+    }
+
+    // MODIFIED: Function to generate GeoJSON features for arrows, now based on distance
+    function generateArrowFeatures(trackPoints) {
+      const features = [];
+      if (!trackPoints || trackPoints.length < 2) {
+        return { type: 'FeatureCollection', features: features };
+      }
+
+      const arrowIntervalMeters = 250; // Desired distance between arrows in meters
+      let distanceSinceLastArrow = 0;
+
+      // Add first arrow at the start of the track.
+      // Bearing from the first point to the second point.
+      // calculateBearing will return 0 if p0 and p1 are identical.
+      let bearing = calculateBearing(trackPoints[0].latitude, trackPoints[0].longitude, trackPoints[1].latitude, trackPoints[1].longitude);
+      features.push({
+        type: 'Feature',
+        geometry: {
+          type: 'Point',
+          coordinates: [trackPoints[0].longitude, trackPoints[0].latitude]
+        },
+        properties: {
+          bearing: bearing
+        }
+      });
+
+      // Iterate through the track points starting from the second point
+      for (let i = 1; i < trackPoints.length; i++) {
+        const p1 = trackPoints[i - 1];
+        const p2 = trackPoints[i];
+        if (p1.longitude === p2.longitude && p1.latitude === p2.latitude) continue;
+        const segmentDistance = calculateDistance(p1.latitude, p1.longitude, p2.latitude, p2.longitude);
+        const totalDistance = distanceSinceLastArrow + segmentDistance;
+        if (totalDistance >= arrowIntervalMeters) {
+          const arrowCount = Math.floor(totalDistance / arrowIntervalMeters);
+          for (let j = 1; j <= arrowCount; j++) {
+            const d = arrowIntervalMeters * j - distanceSinceLastArrow;
+            const t = d / segmentDistance;
+            const lat = p1.latitude + (p2.latitude - p1.latitude) * t;
+            const lon = p1.longitude + (p2.longitude - p1.longitude) * t;
+            const bearing = calculateBearing(p1.latitude, p1.longitude, p2.latitude, p2.longitude);
+            features.push({
+              type: 'Feature',
+              geometry: { type: 'Point', coordinates: [lon, lat] },
+              properties: { bearing }
+            });
+          }
+          distanceSinceLastArrow = totalDistance % arrowIntervalMeters;
+        } else {
+          distanceSinceLastArrow = totalDistance;
+        }
+      }
+
+      return { type: 'FeatureCollection', features: features };
+    }
+
     function loadTrackDataOnMap(newRawTrackData) {
       const processed = processTrackData(newRawTrackData);
       currentPoints = processed.points;
@@ -348,41 +390,60 @@
         slider.max = 0;
         mapContainer.classList.add('no-track');
         dropPromptMessage.textContent = "GPX 无有效数据或解析失败，请重试\n或点击此处选择另一个文件";
-
         if (map.getSource('full-track')) {
           map.getSource('full-track').setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: [] }, properties: {} });
         }
-        updateMapForIndex(0); // Clears current-point and travelled-track
+        // NEW: Clear arrows if no track data
+        if (map.getSource('arrow-points')) {
+          map.getSource('arrow-points').setData({ type: 'FeatureCollection', features: [] });
+        }
+        updateMapForIndex(0);
         return;
       }
 
-      mapContainer.classList.remove('no-track'); // Hide prompt
+      mapContainer.classList.remove('no-track');
       slider.max = currentPoints.length - 1;
       slider.value = 0;
       slider.disabled = false;
 
       map.getSource('full-track').setData(currentFullTrackGeoJSON);
-      updateMapForIndex(0); // Initialize to the first point
+      updateMapForIndex(0);
+
+      // NEW: Generate and display arrows for the full track
+      if (map.getSource('arrow-points') && map.style.getImage('arrow-icon')) { // Check if arrow icon is loaded
+        const arrowFeatures = generateArrowFeatures(currentPoints);
+        map.getSource('arrow-points').setData(arrowFeatures);
+      } else if (map.getSource('arrow-points')) {
+        // Icon might not be loaded yet if this is the first load. Add a small delay or re-check.
+        // For simplicity, we assume it will be loaded. A more robust solution might queue this update.
+        console.warn("Arrow icon not yet loaded, arrows might not appear immediately.");
+        // Retry setting data after a short delay for image to load
+        setTimeout(() => {
+          if (map.getSource('arrow-points') && map.style.getImage('arrow-icon')) {
+            const arrowFeatures = generateArrowFeatures(currentPoints);
+            map.getSource('arrow-points').setData(arrowFeatures);
+          }
+        }, 500);
+
+      }
+
 
       if (currentFullTrackGeoJSON.geometry.coordinates.length > 1) {
         const bounds = new maplibregl.LngLatBounds();
         currentFullTrackGeoJSON.geometry.coordinates.forEach(coord => {
-          bounds.extend(coord.slice(0, 2)); // LngLatBounds only needs [lng, lat]
+          bounds.extend(coord.slice(0, 2));
         });
-        map.fitBounds(bounds, { padding: 60 }); // Add some padding around the track
+        map.fitBounds(bounds, { padding: 60 });
       }
     }
 
-    // 5. 文件拖放处理
     function handleFileDrop(event) {
       event.preventDefault();
       event.stopPropagation();
       mapContainer.classList.remove('dragover');
-      dropPromptMessage.textContent = "正在处理 GPX 文件..."; // Feedback
-
+      dropPromptMessage.textContent = "正在处理 GPX 文件...";
       if (event.dataTransfer.files && event.dataTransfer.files.length > 0) {
-        const file = event.dataTransfer.files[0];
-        processSelectedFile(file);
+        processSelectedFile(event.dataTransfer.files[0]);
       } else {
         if (currentPoints.length === 0) dropPromptMessage.textContent = "请拖放 GPX 文件到地图区域\n或点击此处选择文件";
       }
@@ -399,30 +460,24 @@
       event.preventDefault();
       event.stopPropagation();
       mapContainer.classList.remove('dragover');
-      // Reset prompt text based on whether a track is loaded
       if (currentPoints.length === 0) {
         dropPromptMessage.textContent = "请拖放 GPX 文件到地图区域\n或点击此处选择文件";
-      } else {
-        // If a track is loaded, the prompt is normally hidden.
-        // This state occurs if user drags out without dropping.
       }
     }
 
-    // 6. 初始化 MapLibre GL JS 地图
     map = new maplibregl.Map({
       container: 'map',
       style: 'https://tiles.openfreemap.org/styles/liberty',
-      center: [139.767, 35.681], // Default center (e.g., Tokyo Station)
-      zoom: 5 // Default zoom, will be adjusted by fitBounds later
+      center: [139.767, 35.681],
+      zoom: 5
     });
 
     map.on('load', () => {
-      mapContainer.classList.add('no-track'); // Initially, no track is loaded
+      mapContainer.classList.add('no-track');
 
-      // 添加完整轨迹线数据源和图层 (initially empty)
       map.addSource('full-track', {
         type: 'geojson',
-        data: currentFullTrackGeoJSON // Use the global empty GeoJSON object
+        data: currentFullTrackGeoJSON
       });
       map.addLayer({
         id: 'full-track-line',
@@ -432,7 +487,48 @@
         paint: { 'line-color': '#007bff', 'line-width': 5, 'line-opacity': 0.8 }
       });
 
-      // 添加已行进轨迹的数据源和图层 (initially empty)
+      // NEW: Add SVG arrow image to map's style
+      const arrowUpSvgString = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 12 12"><polygon points="6,0 12,9 0,9" fill="currentColor"/></svg>`;
+
+
+      const img = new Image(16, 16); // Should match SVG width/height for consistency, or let browser decide.
+      img.onload = () => {
+        map.addImage('arrow-icon', img, { sdf: true }); // sdf: true allows recoloring
+
+        // NEW: Add source for arrow points (initially empty)
+        map.addSource('arrow-points', {
+          type: 'geojson',
+          data: { type: 'FeatureCollection', features: [] }
+        });
+
+        // NEW: Add layer for arrows, below the travelled track and current point for clarity
+        map.addLayer({
+          id: 'gpx-arrows',
+          type: 'symbol',
+          source: 'arrow-points',
+          layout: {
+            'icon-image': 'arrow-icon',
+            'icon-size': 0.7, // Adjust size as needed
+            'icon-rotate': ['get', 'bearing'],
+            'icon-rotation-alignment': 'map',
+            'icon-allow-overlap': true,
+            'icon-ignore-placement': true // Important to show all arrows
+          },
+          paint: {
+            'icon-color': '#003399', // Dark blue, or choose another color
+            'icon-opacity': 0.85
+          }
+        }, 'travelled-track-line'); // Place arrows below travelled track, adjust if needed
+      };
+      img.onerror = (e) => {
+        console.error("Failed to load arrow SVG for map icon.", e);
+        alert("无法加载箭头图标，轨迹方向将不显示。");
+      };
+      // Using a triangle pointing "up" (in its local SVG coordinate space, Y decreases upwards).
+      // For a map icon that should point "north" at 0 degrees rotation, this means pointing to top of SVG.
+      img.src = 'data:image/svg+xml;base64,' + btoa(arrowUpSvgString);
+
+
       map.addSource('travelled-track', {
         type: 'geojson',
         data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] }, properties: {} }
@@ -443,12 +539,11 @@
         source: 'travelled-track',
         layout: { 'line-join': 'round', 'line-cap': 'round' },
         paint: { 'line-color': '#28a745', 'line-width': 6, 'line-opacity': 0.9 }
-      },); // Ensure this layer is above the full track
+      });
 
-      // 添加当前位置标记的数据源和图层 (initially no features)
       map.addSource('current-point', {
         type: 'geojson',
-        data: { type: 'FeatureCollection', features: [] } // Start with no point marker
+        data: { type: 'FeatureCollection', features: [] }
       });
       map.addLayer({
         id: 'current-point-marker',
@@ -460,31 +555,27 @@
         }
       });
 
-      // 设置拖放事件监听器
       mapContainer.addEventListener('dragover', handleDragOver);
       mapContainer.addEventListener('dragleave', handleDragLeave);
       mapContainer.addEventListener('drop', handleFileDrop);
 
-      // 初始化UI状态
       timestampDisplay.textContent = "请拖放 GPX 文件";
       slider.disabled = true;
       slider.value = 0;
-      slider.max = 0; // Max for an empty range
+      slider.max = 0;
     });
 
-    // 7. 进度条监听 (global)
     slider.addEventListener('input', (e) => {
       const index = parseInt(e.target.value);
       updateMapForIndex(index);
     });
 
-    // 8. 地图错误处理 (global)
     map.on('error', (e) => {
       console.error('MapLibre GL JS Error:', e);
       if (e.error && e.error.status === 403 && e.url && e.url.includes('openfreemap.org')) {
-        alert("无法加载 OpenFreeMap 瓦片。请检查网络连接或瓦片服务状态。有时瓦片服务可能会有速率限制或临时不可用。");
+        alert("无法加载 OpenFreeMap 瓦片。请检查网络连接或瓦片服务状态。");
       } else if (e.error) {
-        alert(`加载地图时出错: ${e.error.message || '未知错误'}`);
+        alert("加载地图时出错: " + (e.error.message || "未知错误"));
       }
     });
   </script>
