@@ -3,6 +3,11 @@
 // 支持多实例、setGpx(gpxString)、reset()、事件、Shadow DOM 样式隔离
 
 class GPXViewer extends HTMLElement {
+  // 静止检测常量
+  static STOP_WINDOW_SIZE = 5; // 连续点数
+  static STOP_SPEED_THRESHOLD_KMPH = 2; // km/h
+  static STOP_MIN_DURATION_SEC = 60; // 静止区段最小持续时间（秒）
+  static STOP_MAX_DISPLACEMENT_M = 10; // 静止区段最大位移（米）
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
@@ -32,7 +37,7 @@ class GPXViewer extends HTMLElement {
     }
   }
 
-  // 外部接口：传入gpx字符串
+  // 外部接口：传入 gpx 字符串
   setGpx(gpxString) {
     this._gpxString = gpxString;
     const newRawData = this._parseGPXToRawTrackData(gpxString);
@@ -75,7 +80,7 @@ class GPXViewer extends HTMLElement {
     }
   }
 
-  // 初始化Shadow DOM结构和样式
+  // 初始化 Shadow DOM 结构和样式
   _initDOM() {
     this.shadowRoot.innerHTML = `
       <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.1.0/dist/maplibre-gl.css">
@@ -160,7 +165,7 @@ class GPXViewer extends HTMLElement {
         if (e.error && e.error.status === 403 && e.url && e.url.includes('openfreemap.org')) {
           alert("无法加载 OpenFreeMap 瓦片。请检查网络连接或瓦片服务状态。");
         } else if (e.error) {
-          alert("加载地图时出错: " + (e.error.message || "未知错误"));
+          alert("加载地图时出错：" + (e.error.message || "未知错误"));
         }
       });
       this._map.on('zoomend', () => {
@@ -200,6 +205,58 @@ class GPXViewer extends HTMLElement {
     this._slider.disabled = true;
     this._slider.value = 0;
     this._slider.max = 0;
+    // 静止点图层
+    this._map.addSource('stop-points', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    this._map.addLayer({
+      id: 'stop-points-layer',
+      type: 'circle',
+      source: 'stop-points',
+      paint: {
+        'circle-radius': 10,
+        'circle-color': ['get', 'color'],
+        'circle-stroke-width': 3,
+        'circle-stroke-color': '#fff',
+        'circle-opacity': 0.85
+      }
+    });
+    // 暂停图标symbol图层
+    const pauseSvg = `<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'><rect x='4' y='4' width='4' height='12' rx='1.5' fill='#fff'/><rect x='12' y='4' width='4' height='12' rx='1.5' fill='#fff'/></svg>`;
+    const pauseImg = new Image(20, 20);
+    pauseImg.onload = () => {
+      if (!this._map.hasImage('pause-icon')) {
+        this._map.addImage('pause-icon', pauseImg, { sdf: false });
+      }
+    };
+    pauseImg.src = 'data:image/svg+xml;base64,' + btoa(pauseSvg);
+    this._map.addLayer({
+      id: 'stop-points-pause',
+      type: 'symbol',
+      source: 'stop-points',
+      layout: {
+        'icon-image': 'pause-icon',
+        'icon-size': 0.7,
+        'icon-allow-overlap': true,
+        'icon-ignore-placement': true
+      }
+    });
+    // 悬停静止点显示信息
+    let stopPopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 12 });
+    this._map.on('mouseenter', 'stop-points-layer', (e) => {
+      this._map.getCanvas().style.cursor = 'pointer';
+      const feat = e.features && e.features[0];
+      if (feat) {
+        const { startTime, endTime, durationSec } = feat.properties;
+        const startStr = new Date(startTime * 1000).toLocaleString();
+        const endStr = new Date(endTime * 1000).toLocaleString();
+        const min = Math.floor(durationSec / 60), sec = Math.round(durationSec % 60);
+        const html = `<div style="font-family:sans-serif;font-size:0.95em;line-height:1.5;"><b>静止区段</b><br>开始：${startStr}<br>结束：${endStr}<br>持续：${min}分${sec}秒</div>`;
+        stopPopup.setLngLat(feat.geometry.coordinates).setHTML(html).addTo(this._map);
+      }
+    });
+    this._map.on('mouseleave', 'stop-points-layer', () => {
+      this._map.getCanvas().style.cursor = '';
+      if (stopPopup.isOpen()) stopPopup.remove();
+    });
     // 悬浮弹窗
     let trackPopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 15 });
     const handleTrackHoverLayer = (layerId) => {
@@ -258,7 +315,7 @@ class GPXViewer extends HTMLElement {
     handleTrackHoverLayer('track-segments-line');
   }
 
-  // 解析GPX字符串为raw track数据
+  // 解析 GPX 字符串为 raw track 数据
   _parseGPXToRawTrackData(gpxString) {
     const parser = new DOMParser();
     const xmlDoc = parser.parseFromString(gpxString, "text/xml");
@@ -266,7 +323,7 @@ class GPXViewer extends HTMLElement {
     const parseError = xmlDoc.getElementsByTagName("parsererror");
     if (parseError.length > 0) {
       console.error("GPX parsing error:", parseError[0].textContent);
-      alert("GPX 文件解析失败。请检查文件格式。\n错误详情: " + parseError[0].textContent);
+      alert("GPX 文件解析失败。请检查文件格式。\n错误详情：" + parseError[0].textContent);
       return null;
     }
     const trkpts = xmlDoc.querySelectorAll('trkpt');
@@ -303,7 +360,7 @@ class GPXViewer extends HTMLElement {
           altitude_m_scaled_1e1: Math.round(ele * 1e1)
         });
       } else {
-        console.warn(`跳过无效的轨迹点数据: Lat=${lat}, Lon=${lon}, Time=${time}, Ele=${ele}`);
+        console.warn(`跳过无效的轨迹点数据：Lat=${lat}, Lon=${lon}, Time=${time}, Ele=${ele}`);
       }
     });
     if (newRawData.length === 0 && trkpts.length > 0) {
@@ -328,14 +385,79 @@ class GPXViewer extends HTMLElement {
       timestamp: p.timestamp
     }));
     const coordinates = points.map(p => [p.longitude, p.latitude, p.altitude]);
+    // 检测静止区段
+    const stops = this._detectStops(points);
     return {
       points: points,
       fullTrackGeoJSON: {
         type: 'Feature',
         geometry: { type: 'LineString', coordinates: coordinates },
         properties: {}
-      }
+      },
+      stops: stops
     };
+  }
+
+  // 检测静止区段，返回 [{startIdx, endIdx, startTime, endTime, durationSec, centerLng, centerLat}]
+  _detectStops(points) {
+    const res = [];
+    if (!points || points.length < GPXViewer.STOP_WINDOW_SIZE) return res;
+    let i = 0;
+    while (i <= points.length - GPXViewer.STOP_WINDOW_SIZE) {
+      let totalDist = 0, totalTime = 0;
+      for (let j = 0; j < GPXViewer.STOP_WINDOW_SIZE - 1; j++) {
+        const p1 = points[i + j], p2 = points[i + j + 1];
+        totalDist += this._calculateDistance(p1.latitude, p1.longitude, p2.latitude, p2.longitude);
+        totalTime += Math.abs(p2.timestamp - p1.timestamp);
+      }
+      const displacement = this._calculateDistance(
+        points[i].latitude, points[i].longitude,
+        points[i + GPXViewer.STOP_WINDOW_SIZE - 1].latitude,
+        points[i + GPXViewer.STOP_WINDOW_SIZE - 1].longitude
+      );
+      const avgSpeedKmph = totalTime > 0 ? (totalDist / 1000) / (totalTime / 3600) : 0;
+      // 新增：计算首尾点直线距离
+      if (
+        avgSpeedKmph < GPXViewer.STOP_SPEED_THRESHOLD_KMPH &&
+        displacement < GPXViewer.STOP_MAX_DISPLACEMENT_M
+      ) {
+        // 向后扩展直到速度或位移超阈值
+        let endIdx = i + GPXViewer.STOP_WINDOW_SIZE - 1;
+        let lastTime = points[endIdx].timestamp;
+        while (endIdx + 1 < points.length) {
+          const pPrev = points[endIdx], pNext = points[endIdx + 1];
+          const dist = this._calculateDistance(pPrev.latitude, pPrev.longitude, pNext.latitude, pNext.longitude);
+          const dt = Math.abs(pNext.timestamp - pPrev.timestamp);
+          const v = dt > 0 ? (dist / 1000) / (dt / 3600) : 0;
+          // 新增：扩展后再判断首尾位移
+          const newDisplacement = this._calculateDistance(
+            points[i].latitude, points[i].longitude,
+            points[endIdx + 1].latitude, points[endIdx + 1].longitude
+          );
+          if (v >= GPXViewer.STOP_SPEED_THRESHOLD_KMPH || newDisplacement >= GPXViewer.STOP_MAX_DISPLACEMENT_M) break;
+          endIdx++;
+          lastTime = points[endIdx].timestamp;
+        }
+        const durationSec = points[endIdx].timestamp - points[i].timestamp;
+        if (durationSec >= GPXViewer.STOP_MIN_DURATION_SEC) {
+          // 取区段中点为标记点
+          const midIdx = Math.floor((i + endIdx) / 2);
+          res.push({
+            startIdx: i,
+            endIdx: endIdx,
+            startTime: points[i].timestamp,
+            endTime: points[endIdx].timestamp,
+            durationSec,
+            centerLng: points[midIdx].longitude,
+            centerLat: points[midIdx].latitude
+          });
+        }
+        i = endIdx + 1;
+      } else {
+        i++;
+      }
+    }
+    return res;
   }
 
   // 加载轨迹到地图
@@ -343,6 +465,7 @@ class GPXViewer extends HTMLElement {
     const processed = this._processTrackData(newRawTrackData);
     this._currentPoints = processed.points;
     this._currentFullTrackGeoJSON = processed.fullTrackGeoJSON;
+    this._currentStops = processed.stops || [];
     if (this._currentPoints.length === 0) {
       this._timestampDisplay.textContent = "GPX 文件无有效轨迹数据";
       this._slider.disabled = true;
@@ -389,6 +512,9 @@ class GPXViewer extends HTMLElement {
       });
       this._map.fitBounds(bounds, { padding: 60 });
     }
+    if (this._map.getSource('stop-points')) {
+      this._updateStopPointsLayer();
+    }
   }
 
   // 更新地图当前点和已走轨迹
@@ -417,9 +543,8 @@ class GPXViewer extends HTMLElement {
       properties: {}
     });
     const date = new Date(currentPointData.timestamp * 1000);
-    this._timestampDisplay.textContent = `${date.toLocaleString()} (海拔: ${currentPointData.altitude.toFixed(1)}m)`;
+    this._timestampDisplay.textContent = `${date.toLocaleString()} (海拔：${currentPointData.altitude.toFixed(1)}m)`;
   }
-
   // 箭头 bearing 计算
   _calculateBearing(lat1, lon1, lat2, lon2) {
     const toRadians = Math.PI / 180;
@@ -564,6 +689,33 @@ class GPXViewer extends HTMLElement {
     return `rgb(${r},${g},${b})`;
   }
 
+  // 更新静止点图层
+  _updateStopPointsLayer() {
+    if (!this._map || !this._map.getSource('stop-points')) return;
+    const stops = this._currentStops || [];
+    // 计算最大最小durationSec
+    let minDur = Infinity, maxDur = -Infinity;
+    stops.forEach(s => {
+      if (s.durationSec < minDur) minDur = s.durationSec;
+      if (s.durationSec > maxDur) maxDur = s.durationSec;
+    });
+    // 生成带颜色的feature
+    const features = stops.map(stop => {
+      let norm = (maxDur > minDur) ? (stop.durationSec - minDur) / (maxDur - minDur) : 0;
+      return {
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [stop.centerLng, stop.centerLat] },
+        properties: {
+          startTime: stop.startTime,
+          endTime: stop.endTime,
+          durationSec: stop.durationSec,
+          color: this._turboColormap(norm)
+        }
+      };
+    });
+    this._map.getSource('stop-points').setData({ type: 'FeatureCollection', features });
+  }
+
   // 更新分段轨迹图层
   _updateTrackSegmentsLayer() {
     if (!this._map || !this._map.getSource('track-segments')) return;
@@ -591,8 +743,8 @@ class GPXViewer extends HTMLElement {
       try {
         this.setGpx(e.target.result);
       } catch (error) {
-        console.error('处理 GPX 文件时出错:', error);
-        alert('处理 GPX 文件时发生意外错误: ' + error.message);
+        console.error('处理 GPX 文件时出错：', error);
+        alert('处理 GPX 文件时发生意外错误：' + error.message);
         this._timestampDisplay.textContent = 'GPX 加载异常';
         this._slider.disabled = true;
         this._mapContainer.classList.add('no-track');
@@ -600,7 +752,7 @@ class GPXViewer extends HTMLElement {
       }
     };
     reader.onerror = (e) => {
-      console.error('读取文件失败:', e);
+      console.error('读取文件失败：', e);
       alert('读取文件失败。请检查浏览器权限或文件本身。');
       this._timestampDisplay.textContent = '文件读取错误';
       this._slider.disabled = true;
