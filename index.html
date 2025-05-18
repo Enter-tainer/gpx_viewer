@@ -487,6 +487,23 @@
         paint: { 'line-color': '#007bff', 'line-width': 5, 'line-opacity': 0.8 }
       });
 
+      // Add source and layer for the highlighted segment
+      map.addSource('highlighted-segment', {
+        type: 'geojson',
+        data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] }, properties: {} }
+      });
+      map.addLayer({
+        id: 'highlighted-segment-line',
+        type: 'line',
+        source: 'highlighted-segment',
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: {
+          'line-color': '#FFD700', // Gold color for highlight
+          'line-width': 7,         // Slightly wider
+          'line-opacity': 0.85
+        }
+      }); // This layer will be on top of 'full-track-line' by default
+
       // NEW: Add SVG arrow image to map's style
       const arrowUpSvgString = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 12 12"><polygon points="6,0 12,9 0,9" fill="currentColor"/></svg>`;
 
@@ -613,6 +630,21 @@
           const timeDiffSeconds = p2.timestamp - p1.timestamp;
           const distanceMeters = calculateDistance(p1.latitude, p1.longitude, p2.latitude, p2.longitude);
 
+          // Update highlighted segment layer
+          if (map.getSource('highlighted-segment')) {
+            map.getSource('highlighted-segment').setData({
+              type: 'Feature',
+              geometry: {
+                type: 'LineString',
+                coordinates: [
+                  [p1.longitude, p1.latitude, p1.altitude],
+                  [p2.longitude, p2.latitude, p2.altitude]
+                ]
+              },
+              properties: {}
+            });
+          }
+
           let speedKmphText = "---";
           if (timeDiffSeconds > 0) {
             const speedKmph = (distanceMeters / 1000) / (timeDiffSeconds / 3600);
@@ -647,12 +679,24 @@
             .addTo(map);
         } else {
           if (trackPopup.isOpen()) trackPopup.remove();
+          // Clear highlighted segment if no segment is closest
+          if (map.getSource('highlighted-segment')) {
+            map.getSource('highlighted-segment').setData({
+              type: 'Feature', geometry: { type: 'LineString', coordinates: [] }, properties: {}
+            });
+          }
         }
       });
 
       map.on('mouseleave', 'full-track-line', function () {
         if (trackPopup.isOpen()) trackPopup.remove();
         map.getCanvas().style.cursor = '';
+        // Clear highlighted segment layer
+        if (map.getSource('highlighted-segment')) {
+          map.getSource('highlighted-segment').setData({
+            type: 'Feature', geometry: { type: 'LineString', coordinates: [] }, properties: {}
+          });
+        }
       });
 
     });
