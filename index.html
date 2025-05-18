@@ -323,32 +323,29 @@
       return R * c; // Distance in meters
     }
 
-    // MODIFIED: Function to generate GeoJSON features for arrows, now based on distance
-    function generateArrowFeatures(trackPoints) {
+    // 箭头密度控制相关常量
+    const BASE_ARROW_ZOOM = 15; // 以15级为基准
+    const ARROW_INTERVAL_METERS_AT_BASE_ZOOM = 250; // 15级时250米一个箭头
+    const MIN_ARROW_INTERVAL_METERS = 30; // 最小30米
+    const MAX_ARROW_INTERVAL_METERS = 2000000; // 最大2公里
+
+    // 动态生成箭头，传入当前zoom
+    function generateArrowFeatures(trackPoints, currentZoom) {
       const features = [];
       if (!trackPoints || trackPoints.length < 2) {
         return { type: 'FeatureCollection', features: features };
       }
+      // 动态计算当前缩放下的地理间距
+      let arrowIntervalMeters = ARROW_INTERVAL_METERS_AT_BASE_ZOOM * Math.pow(2, BASE_ARROW_ZOOM - currentZoom);
+      arrowIntervalMeters = Math.max(MIN_ARROW_INTERVAL_METERS, Math.min(MAX_ARROW_INTERVAL_METERS, arrowIntervalMeters));
 
-      const arrowIntervalMeters = 250; // Desired distance between arrows in meters
       let distanceSinceLastArrow = 0;
-
-      // Add first arrow at the start of the track.
-      // Bearing from the first point to the second point.
-      // calculateBearing will return 0 if p0 and p1 are identical.
       let bearing = calculateBearing(trackPoints[0].latitude, trackPoints[0].longitude, trackPoints[1].latitude, trackPoints[1].longitude);
       features.push({
         type: 'Feature',
-        geometry: {
-          type: 'Point',
-          coordinates: [trackPoints[0].longitude, trackPoints[0].latitude]
-        },
-        properties: {
-          bearing: bearing
-        }
+        geometry: { type: 'Point', coordinates: [trackPoints[0].longitude, trackPoints[0].latitude] },
+        properties: { bearing }
       });
-
-      // Iterate through the track points starting from the second point
       for (let i = 1; i < trackPoints.length; i++) {
         const p1 = trackPoints[i - 1];
         const p2 = trackPoints[i];
@@ -374,7 +371,6 @@
           distanceSinceLastArrow = totalDistance;
         }
       }
-
       return { type: 'FeatureCollection', features: features };
     }
 
@@ -408,10 +404,9 @@
 
       map.getSource('full-track').setData(currentFullTrackGeoJSON);
       updateMapForIndex(0);
-
-      // NEW: Generate and display arrows for the full track
-      if (map.getSource('arrow-points') && map.style.getImage('arrow-icon')) { // Check if arrow icon is loaded
-        const arrowFeatures = generateArrowFeatures(currentPoints);
+      // 生成箭头，传入当前zoom
+      if (map.getSource('arrow-points') && map.style.getImage('arrow-icon')) {
+        const arrowFeatures = generateArrowFeatures(currentPoints, map.getZoom());
         map.getSource('arrow-points').setData(arrowFeatures);
       } else if (map.getSource('arrow-points')) {
         // Icon might not be loaded yet if this is the first load. Add a small delay or re-check.
@@ -420,11 +415,10 @@
         // Retry setting data after a short delay for image to load
         setTimeout(() => {
           if (map.getSource('arrow-points') && map.style.getImage('arrow-icon')) {
-            const arrowFeatures = generateArrowFeatures(currentPoints);
+            const arrowFeatures = generateArrowFeatures(currentPoints, map.getZoom());
             map.getSource('arrow-points').setData(arrowFeatures);
           }
         }, 500);
-
       }
 
 
@@ -712,6 +706,14 @@
         alert("无法加载 OpenFreeMap 瓦片。请检查网络连接或瓦片服务状态。");
       } else if (e.error) {
         alert("加载地图时出错: " + (e.error.message || "未知错误"));
+      }
+    });
+
+    // 地图缩放后重新生成箭头
+    map.on('zoomend', function () {
+      if (currentPoints && currentPoints.length > 1 && map.getSource('arrow-points')) {
+        const arrowFeatures = generateArrowFeatures(currentPoints, map.getZoom());
+        map.getSource('arrow-points').setData(arrowFeatures);
       }
     });
   </script>
