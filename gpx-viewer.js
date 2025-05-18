@@ -5,9 +5,9 @@
 class GPXViewer extends HTMLElement {
   // 静止检测常量
   static STOP_WINDOW_SIZE = 5; // 连续点数
-  static STOP_SPEED_THRESHOLD_KMPH = 2; // km/h
+  static STOP_SPEED_THRESHOLD_KMPH = 3; // km/h
   static STOP_MIN_DURATION_SEC = 60; // 静止区段最小持续时间（秒）
-  static STOP_MAX_DISPLACEMENT_M = 10; // 静止区段最大位移（米）
+  static STOP_MAX_DISPLACEMENT_M = 30; // 静止区段最大位移（米）
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
