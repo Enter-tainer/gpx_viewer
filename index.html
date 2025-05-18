@@ -563,6 +563,98 @@
       slider.disabled = true;
       slider.value = 0;
       slider.max = 0;
+
+      // NEW: Popup for track segment information
+      let trackPopup = new maplibregl.Popup({
+        closeButton: false,
+        closeOnClick: false,
+        offset: 15 // Offset the popup slightly from the cursor
+      });
+
+      map.on('mousemove', 'full-track-line', function (e) {
+        if (!currentPoints || currentPoints.length < 2) {
+          if (trackPopup.isOpen()) trackPopup.remove();
+          map.getCanvas().style.cursor = '';
+          return;
+        }
+        map.getCanvas().style.cursor = 'pointer';
+
+        const mouseLngLat = e.lngLat;
+        let closestSegment = null;
+        let minDistanceSqToMidpoint = Infinity; // Using squared distance to avoid sqrt
+
+        for (let i = 0; i < currentPoints.length - 1; i++) {
+          const p1 = currentPoints[i];
+          const p2 = currentPoints[i + 1];
+
+          // Ensure p1 and p2 are valid points with longitude and latitude
+          if (!p1 || !p2 || typeof p1.longitude !== 'number' || typeof p1.latitude !== 'number' ||
+            typeof p2.longitude !== 'number' || typeof p2.latitude !== 'number') {
+            console.warn('Skipping invalid segment due to missing coordinates:', p1, p2);
+            continue;
+          }
+
+          const midLng = (p1.longitude + p2.longitude) / 2;
+          const midLat = (p1.latitude + p2.latitude) / 2;
+
+          // Approximate distance squared (faster than sqrt) from mouse to segment midpoint
+          const distLat = midLat - mouseLngLat.lat;
+          const distLng = midLng - mouseLngLat.lng;
+          const distanceSq = distLat * distLat + distLng * distLng;
+
+          if (distanceSq < minDistanceSqToMidpoint) {
+            minDistanceSqToMidpoint = distanceSq;
+            closestSegment = { p1, p2, index: i };
+          }
+        }
+
+        if (closestSegment) {
+          const { p1, p2 } = closestSegment;
+          const timeDiffSeconds = p2.timestamp - p1.timestamp;
+          const distanceMeters = calculateDistance(p1.latitude, p1.longitude, p2.latitude, p2.longitude);
+
+          let speedKmphText = "---";
+          if (timeDiffSeconds > 0) {
+            const speedKmph = (distanceMeters / 1000) / (timeDiffSeconds / 3600);
+            speedKmphText = `${speedKmph.toFixed(2)} km/h`;
+          } else if (timeDiffSeconds === 0) {
+            if (distanceMeters > 0) {
+              speedKmphText = "瞬时移动"; // Instantaneous movement
+            } else {
+              speedKmphText = "0.00 km/h (静止)"; // Stationary
+            }
+          } else { // timeDiffSeconds < 0, should ideally not happen if points are sorted
+            speedKmphText = "数据错误"; // Data error (e.g., time reversed)
+          }
+
+          const segmentStartTime = new Date(p1.timestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+          const segmentEndTime = new Date(p2.timestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+          const segmentDuration = Math.abs(timeDiffSeconds);
+
+          const popupContent = `
+            <div style="font-family: sans-serif; font-size: 0.9em; line-height: 1.4;">
+              <strong>轨迹段信息</strong><br>
+              时段: ${segmentStartTime} - ${segmentEndTime}<br>
+              时长: ${segmentDuration.toFixed(1)} 秒<br>
+              距离: ${distanceMeters.toFixed(1)} 米<br>
+              速度: ${speedKmphText}
+            </div>
+          `;
+
+          trackPopup
+            .setLngLat(mouseLngLat) // Position popup at the mouse cursor
+            .setHTML(popupContent)
+            .addTo(map);
+        } else {
+          if (trackPopup.isOpen()) trackPopup.remove();
+        }
+      });
+
+      map.on('mouseleave', 'full-track-line', function () {
+        if (trackPopup.isOpen()) trackPopup.remove();
+        map.getCanvas().style.cursor = '';
+      });
+
     });
 
     slider.addEventListener('input', (e) => {
