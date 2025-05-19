@@ -46,7 +46,6 @@ class GPXViewer extends HTMLElement {
       this.dispatchEvent(new CustomEvent('gpx-loaded'));
     } else {
       this._timestampDisplay.textContent = "GPX 解析失败";
-      this._slider.disabled = true;
       this._mapContainer.classList.add('no-track');
       this._dropPromptMessage.textContent = "GPX 解析失败，请检查文件并重试\n或点击此处选择另一个文件";
       this.dispatchEvent(new CustomEvent('gpx-error'));
@@ -58,9 +57,6 @@ class GPXViewer extends HTMLElement {
     this._gpxString = null;
     this._currentPoints = [];
     this._currentFullTrackGeoJSON = { type: 'Feature', geometry: { type: 'LineString', coordinates: [] }, properties: {} };
-    this._slider.value = 0;
-    this._slider.max = 0;
-    this._slider.disabled = true;
     this._timestampDisplay.textContent = "未加载数据";
     this._mapContainer.classList.add('no-track');
     this._dropPromptMessage.textContent = "请拖放 GPX 文件到地图区域\n或点击此处选择文件";
@@ -69,6 +65,9 @@ class GPXViewer extends HTMLElement {
       this._map.getSource('arrow-points').setData({ type: 'FeatureCollection', features: [] });
       this._map.getSource('track-segments').setData({ type: 'FeatureCollection', features: [] });
       this._updateMapForIndex(0);
+    }
+    if (this._progressBarContainer) {
+      this._progressBarContainer.innerHTML = '';
     }
   }
 
@@ -87,43 +86,54 @@ class GPXViewer extends HTMLElement {
       <style>
         :host { display: block; position: relative; width: 100%; height: 100%; }
         .map { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: #f0f0f0; }
-        .controls { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(255,255,255,0.9); padding: 10px 20px; border-radius: 8px; z-index: 1; display: flex; align-items: center; gap: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
-        .controls label { font-family: sans-serif; font-size: 14px; }
-        .slider { width: 300px; }
-        .timestamp { font-family: monospace; font-size: 13px; min-width: 180px; padding: 5px; background: #f8f9fa; border-radius: 4px; }
+        .controls { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(255,255,255,0.93); padding: 10px 20px; border-radius: 16px; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.13); min-width: 220px; width: 80vw; max-width: 700px; }
+        .controls-row { display: flex; align-items: center; gap: 15px; width: 100%; justify-content: center; flex-wrap: wrap; }
+        .track-progress-bar { width: 80vw; max-width: 700px; min-width: 160px; height: 100px; margin-bottom: 2px; user-select: none; touch-action: pan-x; margin-left: auto; margin-right: auto; }
+        .timestamp { font-family: monospace; font-size: 13px; min-width: 120px; padding: 5px; background: #f8f9fa; border-radius: 4px; }
         .drop-prompt { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(255,255,255,0.95); padding: 25px 30px; border-radius: 10px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size: 1.3em; color: #333; text-align: center; z-index: 10; pointer-events: auto; display: none; box-shadow: 0 4px 15px rgba(0,0,0,0.1); cursor: pointer; transition: background-color 0.2s, transform 0.1s; }
         .drop-prompt:hover { background: #fff; transform: translate(-50%, -50%) scale(1.02); }
         .drop-prompt:active { transform: translate(-50%, -50%) scale(0.98); }
         .map.no-track .drop-prompt { display: block; }
         .file-input { display: none; }
         .color-mode-select { font-size: 14px; padding: 3px 8px; border-radius: 4px; border: 1px solid #ccc; margin-left: 8px; }
+        @media (max-width: 600px) {
+          .controls { min-width: 0; padding: 8px 2vw; border-radius: 12px; width: 90vw; max-width: 98vw; }
+          .track-progress-bar { min-width: 0; width: 90vw; max-width: 98vw; height: 110px; margin-left: auto; margin-right: auto; }
+          .controls-row { flex-direction: row; flex-wrap: wrap; gap: 10px; justify-content: center; }
+          .timestamp { font-size: 15px; min-width: 100px; padding: 5px; }
+          label { font-size: 15px; }
+          .color-mode-select { font-size: 15px; padding: 4px 10px; margin-left: 6px; }
+        }
       </style>
       <div class="map no-track">
         <div class="drop-prompt">请拖放 GPX 文件到地图区域<br>或点击此处选择文件</div>
       </div>
       <div class="controls">
-        <label>轨迹进度:</label>
-        <input type="range" class="slider" min="0" value="0" step="1" disabled />
-        <div class="timestamp">未加载数据</div>
-        <label style="margin-left:16px;">轨迹颜色:</label>
-        <select class="color-mode-select">
-          <option value="fixed">固定颜色</option>
-          <option value="speed" selected>速度模式</option>
-          <option value="time">时间模式</option>
-        </select>
+        <div class="track-progress-bar"></div>
+        <div class="controls-row">
+          <label style="white-space:nowrap;">轨迹进度:</label>
+          <div class="timestamp">未加载数据</div>
+          <label style="margin-left:10px;white-space:nowrap;">轨迹颜色:</label>
+          <select class="color-mode-select">
+            <option value="fixed">固定颜色</option>
+            <option value="speed" selected>速度模式</option>
+            <option value="time">时间模式</option>
+          </select>
+        </div>
       </div>
       <input type="file" class="file-input" accept=".gpx" />
     `;
     this._mapContainer = this.shadowRoot.querySelector('.map');
     this._dropPromptMessage = this.shadowRoot.querySelector('.drop-prompt');
-    this._slider = this.shadowRoot.querySelector('.slider');
     this._timestampDisplay = this.shadowRoot.querySelector('.timestamp');
     this._fileInput = this.shadowRoot.querySelector('.file-input');
     this._colorModeSelect = this.shadowRoot.querySelector('.color-mode-select');
+    this._progressBarContainer = this.shadowRoot.querySelector('.track-progress-bar');
     // 事件绑定
     this._colorModeSelect.addEventListener('change', () => {
       this._currentColorMode = this._colorModeSelect.value;
       this._updateTrackSegmentsLayer();
+      this._renderTrackProgressBar();
     });
     this._dropPromptMessage.addEventListener('click', () => this._fileInput.click());
     this._fileInput.addEventListener('change', (event) => {
@@ -135,7 +145,7 @@ class GPXViewer extends HTMLElement {
     this._mapContainer.addEventListener('dragover', e => { e.preventDefault(); e.stopPropagation(); this._mapContainer.classList.add('dragover'); this._dropPromptMessage.textContent = "松开以加载 GPX 文件"; });
     this._mapContainer.addEventListener('dragleave', e => { e.preventDefault(); e.stopPropagation(); this._mapContainer.classList.remove('dragover'); if (this._currentPoints.length === 0) this._dropPromptMessage.textContent = "请拖放 GPX 文件到地图区域\n或点击此处选择文件"; });
     this._mapContainer.addEventListener('drop', e => { e.preventDefault(); e.stopPropagation(); this._mapContainer.classList.remove('dragover'); this._dropPromptMessage.textContent = "正在处理 GPX 文件..."; if (e.dataTransfer.files && e.dataTransfer.files.length > 0) { this._processSelectedFile(e.dataTransfer.files[0]); } else { if (this._currentPoints.length === 0) this._dropPromptMessage.textContent = "请拖放 GPX 文件到地图区域\n或点击此处选择文件"; } });
-    this._slider.addEventListener('input', e => { const index = parseInt(e.target.value); this._updateMapForIndex(index); });
+    // SVG进度条交互事件将在_renderTrackProgressBar中绑定
   }
 
   // 动态加载 maplibre-gl（如未加载）
@@ -180,6 +190,10 @@ class GPXViewer extends HTMLElement {
   _onMapLoaded() {
     this._mapLoaded = true;
     this._mapContainer.classList.add('no-track');
+    this._timestampDisplay.textContent = "请拖放 GPX 文件";
+    if (this._progressBarContainer) {
+      this._progressBarContainer.innerHTML = '';
+    }
     this._map.addSource('full-track', { type: 'geojson', data: this._currentFullTrackGeoJSON });
     this._map.addLayer({ id: 'full-track-line', type: 'line', source: 'full-track', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#007bff', 'line-width': 5, 'line-opacity': 0.8 } });
     this._map.addSource('highlighted-segment', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] }, properties: {} } });
@@ -201,10 +215,6 @@ class GPXViewer extends HTMLElement {
     this._map.addSource('track-segments', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
     this._map.addLayer({ id: 'track-segments-line', type: 'line', source: 'track-segments', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': ['get', 'color'], 'line-width': 5, 'line-opacity': 0.95 } }, 'full-track-line');
     this._map.setLayoutProperty('track-segments-line', 'visibility', 'none');
-    this._timestampDisplay.textContent = "请拖放 GPX 文件";
-    this._slider.disabled = true;
-    this._slider.value = 0;
-    this._slider.max = 0;
     // 静止点图层
     this._map.addSource('stop-points', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
     this._map.addLayer({
@@ -468,9 +478,6 @@ class GPXViewer extends HTMLElement {
     this._currentStops = processed.stops || [];
     if (this._currentPoints.length === 0) {
       this._timestampDisplay.textContent = "GPX 文件无有效轨迹数据";
-      this._slider.disabled = true;
-      this._slider.value = 0;
-      this._slider.max = 0;
       this._mapContainer.classList.add('no-track');
       this._dropPromptMessage.textContent = "GPX 无有效数据或解析失败，请重试\n或点击此处选择另一个文件";
       if (this._map.getSource('full-track')) {
@@ -483,12 +490,12 @@ class GPXViewer extends HTMLElement {
         this._map.getSource('track-segments').setData({ type: 'FeatureCollection', features: [] });
       }
       this._updateMapForIndex(0);
+      if (this._progressBarContainer) {
+        this._progressBarContainer.innerHTML = '';
+      }
       return;
     }
     this._mapContainer.classList.remove('no-track');
-    this._slider.max = this._currentPoints.length - 1;
-    this._slider.value = 0;
-    this._slider.disabled = false;
     this._map.getSource('full-track').setData(this._currentFullTrackGeoJSON);
     this._updateMapForIndex(0);
     if (this._map.getSource('arrow-points') && this._map.style.getImage('arrow-icon')) {
@@ -515,6 +522,8 @@ class GPXViewer extends HTMLElement {
     if (this._map.getSource('stop-points')) {
       this._updateStopPointsLayer();
     }
+    // 渲染SVG进度条
+    this._renderTrackProgressBar();
   }
 
   // 更新地图当前点和已走轨迹
@@ -746,21 +755,211 @@ class GPXViewer extends HTMLElement {
         console.error('处理 GPX 文件时出错：', error);
         alert('处理 GPX 文件时发生意外错误：' + error.message);
         this._timestampDisplay.textContent = 'GPX 加载异常';
-        this._slider.disabled = true;
         this._mapContainer.classList.add('no-track');
         this._dropPromptMessage.textContent = 'GPX 加载异常，请重试\n或点击此处选择另一个文件';
+        if (this._progressBarContainer) {
+          this._progressBarContainer.innerHTML = '';
+        }
       }
     };
     reader.onerror = (e) => {
       console.error('读取文件失败：', e);
       alert('读取文件失败。请检查浏览器权限或文件本身。');
       this._timestampDisplay.textContent = '文件读取错误';
-      this._slider.disabled = true;
       this._mapContainer.classList.add('no-track');
       this._dropPromptMessage.textContent = '文件读取错误，请重试\n或点击此处选择另一个文件';
+      if (this._progressBarContainer) {
+        this._progressBarContainer.innerHTML = '';
+      }
     };
     reader.readAsText(file);
     this._fileInput.value = '';
+  }
+
+  // 渲染轨迹进度条（SVG）
+  _renderTrackProgressBar() {
+    const container = this._progressBarContainer;
+    container.innerHTML = '';
+    if (!this._currentPoints || this._currentPoints.length === 0) return;
+    const points = this._currentPoints;
+    const N = points.length;
+    if (N < 2) return;
+    // 响应式参数
+    const isMobile = window.innerWidth < 600;
+    // 动态获取父容器宽度
+    let W = container.clientWidth;
+    if (!W || W < 100) W = isMobile ? 320 : 700; // 容错
+    const H = isMobile ? 90 : 100;
+    const margin = isMobile ? { left: 18, right: 18, top: 18, bottom: 24 } : { left: 40, right: 40, top: 22, bottom: 28 };
+    const barY = H - margin.bottom - 16;
+    const barH = isMobile ? 10 : 12;
+    const barR = isMobile ? 4 : 6;
+    const polyH = H - margin.top - margin.bottom - barH - 16;
+    // 计算宽度自适应
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('width', W);
+    svg.setAttribute('height', H);
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    svg.style.display = 'block';
+    svg.style.touchAction = 'pan-x';
+    // 1. 彩色分段带
+    let minV = Infinity, maxV = -Infinity;
+    let speeds = [];
+    if (this._currentColorMode === 'speed') {
+      for (let i = 0; i < N - 1; i++) {
+        const p1 = points[i], p2 = points[i + 1];
+        const dt = p2.timestamp - p1.timestamp;
+        const dist = this._calculateDistance(p1.latitude, p1.longitude, p2.latitude, p2.longitude);
+        let v = (dt > 0) ? (dist / dt) : 0;
+        speeds.push(v);
+        if (v < minV) minV = v;
+        if (v > maxV) maxV = v;
+      }
+    }
+    for (let i = 0; i < N - 1; i++) {
+      const x1 = margin.left + ((W - margin.left - margin.right) * i) / (N - 1);
+      const x2 = margin.left + ((W - margin.left - margin.right) * (i + 1)) / (N - 1);
+      let color = '#007bff';
+      if (this._currentColorMode === 'speed') {
+        let norm = (maxV > minV) ? (speeds[i] - minV) / (maxV - minV) : 0;
+        color = this._turboColormap(norm);
+      } else if (this._currentColorMode === 'time') {
+        let norm = (points[i].timestamp - points[0].timestamp) / (points[N - 1].timestamp - points[0].timestamp);
+        color = this._turboColormap(norm);
+      }
+      const seg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      seg.setAttribute('x', x1);
+      seg.setAttribute('y', barY);
+      seg.setAttribute('width', Math.max(1, x2 - x1));
+      seg.setAttribute('height', barH);
+      seg.setAttribute('fill', color);
+      seg.setAttribute('rx', barR);
+      seg.setAttribute('ry', barR);
+      svg.appendChild(seg);
+    }
+    // 2. 海拔折线图
+    let minAlt = Infinity, maxAlt = -Infinity;
+    for (let i = 0; i < N; i++) {
+      if (points[i].altitude < minAlt) minAlt = points[i].altitude;
+      if (points[i].altitude > maxAlt) maxAlt = points[i].altitude;
+    }
+    const polyPoints = [];
+    for (let i = 0; i < N; i++) {
+      const x = margin.left + ((W - margin.left - margin.right) * i) / (N - 1);
+      let y = margin.top + polyH;
+      if (maxAlt > minAlt) {
+        y = margin.top + polyH - ((points[i].altitude - minAlt) / (maxAlt - minAlt)) * polyH;
+      }
+      polyPoints.push(`${x},${y}`);
+    }
+    const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+    polyline.setAttribute('points', polyPoints.join(' '));
+    polyline.setAttribute('fill', 'none');
+    polyline.setAttribute('stroke', '#1976d2');
+    polyline.setAttribute('stroke-width', isMobile ? 1.5 : 2.2);
+    polyline.setAttribute('opacity', 0.95);
+    svg.appendChild(polyline);
+    // 3. 时间刻度
+    const timeStep = Math.max(1, Math.floor(N / (isMobile ? 4 : 5)));
+    for (let i = 0; i < N; i += timeStep) {
+      const x = margin.left + ((W - margin.left - margin.right) * i) / (N - 1);
+      const t = new Date(points[i].timestamp * 1000);
+      const label = t.getHours().toString().padStart(2, '0') + ':' + t.getMinutes().toString().padStart(2, '0');
+      const tick = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      tick.setAttribute('x1', x);
+      tick.setAttribute('x2', x);
+      tick.setAttribute('y1', barY + barH + 2);
+      tick.setAttribute('y2', barY + barH + 10);
+      tick.setAttribute('stroke', '#888');
+      tick.setAttribute('stroke-width', 1);
+      svg.appendChild(tick);
+      const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      text.setAttribute('x', x);
+      text.setAttribute('y', barY + barH + (isMobile ? 22 : 24));
+      text.setAttribute('text-anchor', 'middle');
+      text.setAttribute('font-size', isMobile ? '15' : '13');
+      text.setAttribute('fill', '#444');
+      text.setAttribute('font-family', 'monospace');
+      text.textContent = label;
+      svg.appendChild(text);
+    }
+    // 4. 当前点高亮 + 速度显示
+    let currentIdx = 0;
+    // 速度文本（SVG外部div，便于响应式）
+    let speedDiv = document.createElement('div');
+    speedDiv.style.textAlign = 'center';
+    speedDiv.style.fontSize = isMobile ? '18px' : '16px';
+    speedDiv.style.fontWeight = 'bold';
+    speedDiv.style.marginBottom = isMobile ? '2px' : '4px';
+    speedDiv.style.color = '#1976d2';
+    speedDiv.style.fontFamily = 'monospace';
+    container.appendChild(speedDiv);
+    const drawCursor = (idx) => {
+      // 移除旧的
+      const old = svg.querySelector('#track-cursor');
+      if (old) old.remove();
+      const x = margin.left + ((W - margin.left - margin.right) * idx) / (N - 1);
+      const cursor = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      cursor.setAttribute('id', 'track-cursor');
+      cursor.setAttribute('cx', x);
+      let y = margin.top + polyH;
+      if (maxAlt > minAlt) {
+        y = margin.top + polyH - ((points[idx].altitude - minAlt) / (maxAlt - minAlt)) * polyH;
+      }
+      cursor.setAttribute('cy', y);
+      cursor.setAttribute('r', isMobile ? 5 : 6.5);
+      cursor.setAttribute('fill', '#fff');
+      cursor.setAttribute('stroke', '#dc3545');
+      cursor.setAttribute('stroke-width', isMobile ? 2 : 2.5);
+      cursor.setAttribute('opacity', 0.98);
+      svg.appendChild(cursor);
+    };
+    // 速度计算函数
+    const getSpeedText = (idx) => {
+      if (idx <= 0 || idx >= N) return '-- km/h';
+      const p1 = points[idx - 1], p2 = points[idx];
+      const dt = p2.timestamp - p1.timestamp;
+      const dist = this._calculateDistance(p1.latitude, p1.longitude, p2.latitude, p2.longitude);
+      let v = (dt > 0) ? (dist / dt) * 3.6 : 0; // m/s -> km/h
+      return `速度：${v.toFixed(2)} km/h`;
+    };
+    const updateSpeed = (idx) => {
+      speedDiv.textContent = getSpeedText(idx);
+    };
+    drawCursor(currentIdx);
+    updateSpeed(currentIdx);
+    // 5. 交互：点击/拖动
+    let dragging = false;
+    const getIdxFromEvent = (evt) => {
+      let clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
+      const rect = svg.getBoundingClientRect();
+      // 计算实际SVG宽度比例，保证触摸点和SVG坐标一致
+      const scale = rect.width / W;
+      let x = (clientX - rect.left) / scale;
+      x = Math.max(margin.left, Math.min(W - margin.right, x));
+      let idx = Math.round(((x - margin.left) / (W - margin.left - margin.right)) * (N - 1));
+      idx = Math.max(0, Math.min(N - 1, idx));
+      return idx;
+    };
+    const updateAll = (idx) => {
+      currentIdx = idx;
+      drawCursor(idx);
+      updateSpeed(idx);
+      this._updateMapForIndex(idx);
+      // 同步时间显示
+      const date = new Date(points[idx].timestamp * 1000);
+      this._timestampDisplay.textContent = `${date.toLocaleString()} (海拔：${points[idx].altitude.toFixed(1)}m)`;
+    };
+    svg.addEventListener('mousedown', (e) => { dragging = true; updateAll(getIdxFromEvent(e)); });
+    svg.addEventListener('touchstart', (e) => { dragging = true; updateAll(getIdxFromEvent(e)); });
+    window.addEventListener('mousemove', (e) => { if (dragging) updateAll(getIdxFromEvent(e)); });
+    window.addEventListener('touchmove', (e) => { if (dragging) updateAll(getIdxFromEvent(e)); }, { passive: false });
+    window.addEventListener('mouseup', () => { dragging = false; });
+    window.addEventListener('touchend', () => { dragging = false; });
+    svg.addEventListener('click', (e) => { updateAll(getIdxFromEvent(e)); });
+    // 首次渲染时同步地图
+    updateAll(0);
+    container.appendChild(svg);
   }
 }
 
