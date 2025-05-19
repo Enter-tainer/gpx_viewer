@@ -5,7 +5,6 @@
 > **⚠️ 警告**: 本项目（包括代码、文档和本README）完全由AI大语言模型生成。未经充分测试和验证，使用后果自负。
 
 ![alt text](image.png)
-
 ## 项目特色
 
 - **原生 WebComponent**：自定义元素 `<gpx-viewer>`，支持多实例和 Shadow DOM 样式隔离，易于集成到任意网页。
