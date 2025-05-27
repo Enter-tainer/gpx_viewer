@@ -39,17 +39,21 @@ class GPXViewer extends HTMLElement {
 
   // 外部接口：传入 gpx 字符串
   setGpx(gpxString) {
-    this._gpxString = gpxString;
-    const newRawData = this._parseGPXToRawTrackData(gpxString);
-    if (newRawData !== null) {
-      this._loadTrackDataOnMap(newRawData);
-      this.dispatchEvent(new CustomEvent('gpx-loaded'));
-    } else {
-      this._timestampDisplay.textContent = "GPX 解析失败";
-      this._mapContainer.classList.add('no-track');
-      this._dropPromptMessage.textContent = "GPX 解析失败，请检查文件并重试\n或点击此处选择另一个文件";
-      this.dispatchEvent(new CustomEvent('gpx-error'));
+    this._gpxString = gpxString; // 保存 gpx 字符串
+    // 如果地图已经加载，则直接处理
+    if (this._mapLoaded) {
+      const newRawData = this._parseGPXToRawTrackData(gpxString);
+      if (newRawData !== null) {
+        this._loadTrackDataOnMap(newRawData);
+        this.dispatchEvent(new CustomEvent('gpx-loaded'));
+      } else {
+        this._timestampDisplay.textContent = "GPX 解析失败";
+        this._mapContainer.classList.add('no-track');
+        this._dropPromptMessage.textContent = "GPX 解析失败，请检查文件并重试\n或点击此处选择另一个文件";
+        this.dispatchEvent(new CustomEvent('gpx-error'));
+      }
     }
+    // 如果地图尚未加载，_onMapLoaded 会在地图加载完成后处理 this._gpxString
   }
 
   // 外部接口：重置
@@ -189,25 +193,31 @@ class GPXViewer extends HTMLElement {
 
   _onMapLoaded() {
     this._mapLoaded = true;
-    this._mapContainer.classList.add('no-track');
-    this._timestampDisplay.textContent = "请拖放 GPX 文件";
-    if (this._progressBarContainer) {
-      this._progressBarContainer.innerHTML = '';
-    }
+    // 地图源和图层初始化
     this._map.addSource('full-track', { type: 'geojson', data: this._currentFullTrackGeoJSON });
+    // 添加描边图层（更宽，颜色对比）
+    this._map.addLayer({ id: 'full-track-stroke', type: 'line', source: 'full-track', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#000000', 'line-width': 8, 'line-opacity': 0.9 } });
     this._map.addLayer({ id: 'full-track-line', type: 'line', source: 'full-track', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#007bff', 'line-width': 5, 'line-opacity': 0.8 } });
     this._map.addSource('highlighted-segment', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] }, properties: {} } });
     this._map.addLayer({ id: 'highlighted-segment-line', type: 'line', source: 'highlighted-segment', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#FFD700', 'line-width': 7, 'line-opacity': 0.85 } });
-    // 箭头图标
+
     const arrowUpSvgString = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 12 12"><polygon points="6,0 12,9 0,9" fill="currentColor"/></svg>`;
     const img = new Image(16, 16);
     img.onload = () => {
-      this._map.addImage('arrow-icon', img, { sdf: true });
-      this._map.addSource('arrow-points', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-      this._map.addLayer({ id: 'gpx-arrows', type: 'symbol', source: 'arrow-points', layout: { 'icon-image': 'arrow-icon', 'icon-size': 0.7, 'icon-rotate': ['get', 'bearing'], 'icon-rotation-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true }, paint: { 'icon-color': '#003399', 'icon-opacity': 0.85 } }, 'travelled-track-line');
+      if (!this._map.hasImage('arrow-icon')) { // 检查图标是否已存在
+        this._map.addImage('arrow-icon', img, { sdf: true });
+      }
+      // 确保 arrow-points 源和图层在图标加载后添加，并且只添加一次
+      if (!this._map.getSource('arrow-points')) {
+        this._map.addSource('arrow-points', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      }
+      if (!this._map.getLayer('gpx-arrows')) {
+        this._map.addLayer({ id: 'gpx-arrows', type: 'symbol', source: 'arrow-points', layout: { 'icon-image': 'arrow-icon', 'icon-size': 0.7, 'icon-rotate': ['get', 'bearing'], 'icon-rotation-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true }, paint: { 'icon-color': '#003399', 'icon-opacity': 0.85 } }, 'travelled-track-line');
+      }
     };
     img.onerror = (e) => { console.error("Failed to load arrow SVG for map icon.", e); };
     img.src = 'data:image/svg+xml;base64,' + btoa(arrowUpSvgString);
+
     this._map.addSource('travelled-track', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] }, properties: {} } });
     this._map.addLayer({ id: 'travelled-track-line', type: 'line', source: 'travelled-track', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#28a745', 'line-width': 6, 'line-opacity': 0.9 } });
     this._map.addSource('current-point', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
@@ -215,7 +225,7 @@ class GPXViewer extends HTMLElement {
     this._map.addSource('track-segments', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
     this._map.addLayer({ id: 'track-segments-line', type: 'line', source: 'track-segments', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': ['get', 'color'], 'line-width': 5, 'line-opacity': 0.95 } }, 'full-track-line');
     this._map.setLayoutProperty('track-segments-line', 'visibility', 'none');
-    // 静止点图层
+
     this._map.addSource('stop-points', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
     this._map.addLayer({
       id: 'stop-points-layer',
@@ -229,26 +239,50 @@ class GPXViewer extends HTMLElement {
         'circle-opacity': 0.85
       }
     });
-    // 暂停图标symbol图层
+
     const pauseSvg = `<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'><rect x='4' y='4' width='4' height='12' rx='1.5' fill='#fff'/><rect x='12' y='4' width='4' height='12' rx='1.5' fill='#fff'/></svg>`;
     const pauseImg = new Image(20, 20);
     pauseImg.onload = () => {
       if (!this._map.hasImage('pause-icon')) {
         this._map.addImage('pause-icon', pauseImg, { sdf: false });
       }
+      if (!this._map.getLayer('stop-points-pause')) {
+        this._map.addLayer({
+          id: 'stop-points-pause',
+          type: 'symbol',
+          source: 'stop-points',
+          layout: {
+            'icon-image': 'pause-icon',
+            'icon-size': 0.7,
+            'icon-allow-overlap': true,
+            'icon-ignore-placement': true
+          }
+        });
+      }
     };
     pauseImg.src = 'data:image/svg+xml;base64,' + btoa(pauseSvg);
-    this._map.addLayer({
-      id: 'stop-points-pause',
-      type: 'symbol',
-      source: 'stop-points',
-      layout: {
-        'icon-image': 'pause-icon',
-        'icon-size': 0.7,
-        'icon-allow-overlap': true,
-        'icon-ignore-placement': true
+
+    // 在地图加载完成后，检查是否有待处理的 GPX 数据
+    if (this._gpxString) {
+      const newRawData = this._parseGPXToRawTrackData(this._gpxString);
+      if (newRawData !== null) {
+        this._loadTrackDataOnMap(newRawData);
+        this.dispatchEvent(new CustomEvent('gpx-loaded'));
+      } else {
+        this._timestampDisplay.textContent = "GPX 解析失败";
+        this._mapContainer.classList.add('no-track');
+        this._dropPromptMessage.textContent = "GPX 解析失败，请检查文件并重试\n或点击此处选择另一个文件";
+        this.dispatchEvent(new CustomEvent('gpx-error'));
       }
-    });
+    } else {
+      // 如果没有 gpxString，才显示初始的拖放提示状态
+      this._mapContainer.classList.add('no-track');
+      this._timestampDisplay.textContent = "请拖放 GPX 文件";
+      this._dropPromptMessage.textContent = "请拖放 GPX 文件到地图区域\n或点击此处选择文件";
+      if (this._progressBarContainer) {
+        this._progressBarContainer.innerHTML = '';
+      }
+    }
     // 悬停静止点显示信息
     let stopPopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 12 });
     this._map.on('mouseenter', 'stop-points-layer', (e) => {
@@ -268,6 +302,7 @@ class GPXViewer extends HTMLElement {
       if (stopPopup.isOpen()) stopPopup.remove();
     });
     // 悬浮弹窗
+    // 确保 handleTrackHoverLayer 定义和调用在所有图层添加后
     let trackPopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 15 });
     const handleTrackHoverLayer = (layerId) => {
       this._map.on('mousemove', layerId, (e) => {
@@ -321,8 +356,15 @@ class GPXViewer extends HTMLElement {
         }
       });
     };
-    handleTrackHoverLayer('full-track-line');
-    handleTrackHoverLayer('track-segments-line');
+
+
+    // 确保在图层实际存在后再调用
+    if (this._map.getLayer('full-track-line')) {
+      handleTrackHoverLayer('full-track-line');
+    }
+    if (this._map.getLayer('track-segments-line')) {
+      handleTrackHoverLayer('track-segments-line');
+    }
   }
 
   // 解析 GPX 字符串为 raw track 数据
@@ -641,7 +683,6 @@ class GPXViewer extends HTMLElement {
         });
       }
     } else if (colorMode === 'speed') {
-      let minV = Infinity, maxV = -Infinity;
       const speeds = [];
       for (let i = 0; i < points.length - 1; i++) {
         const p1 = points[i], p2 = points[i + 1];
@@ -649,9 +690,14 @@ class GPXViewer extends HTMLElement {
         const dist = this._calculateDistance(p1.latitude, p1.longitude, p2.latitude, p2.longitude);
         let v = (dt > 0) ? (dist / dt) : 0;
         speeds.push(v);
-        if (v < minV) minV = v;
-        if (v > maxV) maxV = v;
       }
+      // use p99 and p1 as min and max
+      const sortedSpeeds = [...speeds].sort((a, b) => a - b);
+      const p99Index = Math.floor(sortedSpeeds.length * 0.99);
+      const p1Index = Math.floor(sortedSpeeds.length * 0.01);
+      const minV = sortedSpeeds[p1Index] || 0;
+      const maxV = sortedSpeeds[p99Index] || 0;
+      console.log(`p1: ${sortedSpeeds[p1Index]}, p99: ${sortedSpeeds[p99Index]}`);
       for (let i = 0; i < points.length - 1; i++) {
         const p1 = points[i], p2 = points[i + 1];
         let norm = (maxV > minV) ? (speeds[i] - minV) / (maxV - minV) : 0;
