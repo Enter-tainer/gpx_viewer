@@ -683,21 +683,8 @@ class GPXViewer extends HTMLElement {
         });
       }
     } else if (colorMode === 'speed') {
-      const speeds = [];
-      for (let i = 0; i < points.length - 1; i++) {
-        const p1 = points[i], p2 = points[i + 1];
-        const dt = p2.timestamp - p1.timestamp;
-        const dist = this._calculateDistance(p1.latitude, p1.longitude, p2.latitude, p2.longitude);
-        let v = (dt > 0) ? (dist / dt) : 0;
-        speeds.push(v);
-      }
-      // use p99 and p1 as min and max
-      const sortedSpeeds = [...speeds].sort((a, b) => a - b);
-      const p99Index = Math.floor(sortedSpeeds.length * 0.99);
-      const p1Index = Math.floor(sortedSpeeds.length * 0.01);
-      const minV = sortedSpeeds[p1Index] || 0;
-      const maxV = sortedSpeeds[p99Index] || 0;
-      console.log(`p1: ${sortedSpeeds[p1Index]}, p99: ${sortedSpeeds[p99Index]}`);
+      const { speeds, minV, maxV } = this._calculateSpeedsWithPercentiles(points);
+      console.log(`p1: ${minV}, p99: ${maxV}`);
       for (let i = 0; i < points.length - 1; i++) {
         const p1 = points[i], p2 = points[i + 1];
         let norm = (maxV > minV) ? (speeds[i] - minV) / (maxV - minV) : 0;
@@ -781,6 +768,31 @@ class GPXViewer extends HTMLElement {
     this._map.setLayoutProperty('track-segments-line', 'visibility', showFull ? 'none' : 'visible');
   }
 
+  // 计算速度数组并返回p1和p99百分位数值
+  _calculateSpeedsWithPercentiles(points) {
+    if (!points || points.length < 2) {
+      return { speeds: [], minV: 0, maxV: 0 };
+    }
+
+    const speeds = [];
+    for (let i = 0; i < points.length - 1; i++) {
+      const p1 = points[i], p2 = points[i + 1];
+      const dt = p2.timestamp - p1.timestamp;
+      const dist = this._calculateDistance(p1.latitude, p1.longitude, p2.latitude, p2.longitude);
+      let v = (dt > 0) ? (dist / dt) : 0;
+      speeds.push(v);
+    }
+
+    // use p99 and p1 as min and max
+    const sortedSpeeds = [...speeds].sort((a, b) => a - b);
+    const p99Index = Math.floor(sortedSpeeds.length * 0.99);
+    const p1Index = Math.floor(sortedSpeeds.length * 0.01);
+    const minV = sortedSpeeds[p1Index] || 0;
+    const maxV = sortedSpeeds[p99Index] || 0;
+
+    return { speeds, minV, maxV };
+  }
+
   // 处理文件选择和拖拽的私有方法
   _processSelectedFile(file) {
     if (!file || !file.name.toLowerCase().endsWith('.gpx')) {
@@ -849,19 +861,15 @@ class GPXViewer extends HTMLElement {
     svg.style.display = 'block';
     svg.style.touchAction = 'pan-x';
     // 1. 彩色分段带
-    let minV = Infinity, maxV = -Infinity;
+    let minV = 0, maxV = 0;
     let speeds = [];
     if (this._currentColorMode === 'speed') {
-      for (let i = 0; i < N - 1; i++) {
-        const p1 = points[i], p2 = points[i + 1];
-        const dt = p2.timestamp - p1.timestamp;
-        const dist = this._calculateDistance(p1.latitude, p1.longitude, p2.latitude, p2.longitude);
-        let v = (dt > 0) ? (dist / dt) : 0;
-        speeds.push(v);
-        if (v < minV) minV = v;
-        if (v > maxV) maxV = v;
-      }
+      const speedData = this._calculateSpeedsWithPercentiles(points);
+      speeds = speedData.speeds;
+      minV = speedData.minV;
+      maxV = speedData.maxV;
     }
+
     for (let i = 0; i < N - 1; i++) {
       const x1 = margin.left + ((W - margin.left - margin.right) * i) / (N - 1);
       const x2 = margin.left + ((W - margin.left - margin.right) * (i + 1)) / (N - 1);
