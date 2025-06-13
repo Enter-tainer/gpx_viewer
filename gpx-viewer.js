@@ -642,7 +642,11 @@ class GPXViewer extends HTMLElement {
     this._map.addSource('current-point', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
     this._map.addLayer({ id: 'current-point-marker', type: 'circle', source: 'current-point', paint: { 'circle-radius': 8, 'circle-color': '#dc3545', 'circle-stroke-width': 2, 'circle-stroke-color': '#ffffff' } });
     this._map.addSource('track-segments', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    // 添加分段轨迹描边层（黑色，更宽）
+    this._map.addLayer({ id: 'track-segments-stroke', type: 'line', source: 'track-segments', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#000000', 'line-width': 8, 'line-opacity': 0.9 } }, 'full-track-line');
+    // 添加分段轨迹彩色层
     this._map.addLayer({ id: 'track-segments-line', type: 'line', source: 'track-segments', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': ['get', 'color'], 'line-width': 5, 'line-opacity': 0.95 } }, 'full-track-line');
+    this._map.setLayoutProperty('track-segments-stroke', 'visibility', 'none');
     this._map.setLayoutProperty('track-segments-line', 'visibility', 'none');
 
     this._map.addSource('stop-points', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
@@ -1194,26 +1198,30 @@ class GPXViewer extends HTMLElement {
     if (!this._map || !this._map.getSource('track-segments')) return;
     if (this._currentSegments && this._segmentVisibility) {
       const anySelected = this._segmentVisibility.some(v => v);
-      const features = [];
       const allSegments = [];
+      const allFeatures = [];
+
       this._currentSegments.forEach((seg, idx) => {
         if (anySelected ? this._segmentVisibility[idx] : true) {
           if (seg.points.length > 1) {
             allSegments.push(seg.points.map(p => [p.longitude, p.latitude, p.altitude]));
-            for (let i = 0; i < seg.points.length - 1; i++) {
-              const p1 = seg.points[i], p2 = seg.points[i + 1];
-              features.push({
-                type: 'Feature',
-                geometry: { type: 'LineString', coordinates: [[p1.longitude, p1.latitude, p1.altitude], [p2.longitude, p2.latitude, p2.altitude]] },
-                properties: { color: '#007bff' }
-              });
+
+            // 为每个分段独立生成带颜色的features
+            const segGeoJSON = this._generateSegmentedTrackGeoJSON(seg.points, this._currentColorMode);
+            if (segGeoJSON && segGeoJSON.features) {
+              allFeatures.push(...segGeoJSON.features);
             }
           }
         }
       });
+
+      // 设置分段轨迹数据
+      this._map.getSource('track-segments').setData({ type: 'FeatureCollection', features: allFeatures });
+
       // 主线和描边始终MultiLineString
       const mainLineGeoJSON = { type: 'Feature', geometry: { type: 'MultiLineString', coordinates: allSegments }, properties: {} };
       this._map.getSource('full-track').setData(mainLineGeoJSON);
+
       // 箭头
       if (this._map.getSource('arrow-points') && this._map.style.getImage('arrow-icon')) {
         let arrowFeatures = { type: 'FeatureCollection', features: [] };
@@ -1226,13 +1234,14 @@ class GPXViewer extends HTMLElement {
         });
         this._map.getSource('arrow-points').setData(arrowFeatures);
       }
-      // 分段线
-      this._map.getSource('track-segments').setData({ type: 'FeatureCollection', features });
+
       // 显示/隐藏
       const visible = allSegments.length > 0;
-      this._map.setLayoutProperty('full-track-line', 'visibility', visible ? 'visible' : 'none');
-      this._map.setLayoutProperty('full-track-stroke', 'visibility', visible ? 'visible' : 'none');
-      this._map.setLayoutProperty('track-segments-line', 'visibility', visible ? 'visible' : 'none');
+      const showFull = this._currentColorMode === 'fixed';
+      this._map.setLayoutProperty('full-track-line', 'visibility', (visible && showFull) ? 'visible' : 'none');
+      this._map.setLayoutProperty('full-track-stroke', 'visibility', (visible && showFull) ? 'visible' : 'none');
+      this._map.setLayoutProperty('track-segments-stroke', 'visibility', (visible && !showFull) ? 'visible' : 'none');
+      this._map.setLayoutProperty('track-segments-line', 'visibility', (visible && !showFull) ? 'visible' : 'none');
       this._map.setLayoutProperty('gpx-arrows', 'visibility', visible ? 'visible' : 'none');
       this._map.setLayoutProperty('travelled-track-line', 'visibility', visible ? 'visible' : 'none');
       this._map.setLayoutProperty('current-point-marker', 'visibility', visible ? 'visible' : 'none');
@@ -1242,6 +1251,8 @@ class GPXViewer extends HTMLElement {
     this._map.getSource('track-segments').setData(segGeoJSON);
     const showFull = this._currentColorMode === 'fixed';
     this._map.setLayoutProperty('full-track-line', 'visibility', showFull ? 'visible' : 'none');
+    this._map.setLayoutProperty('full-track-stroke', 'visibility', showFull ? 'visible' : 'none');
+    this._map.setLayoutProperty('track-segments-stroke', 'visibility', showFull ? 'none' : 'visible');
     this._map.setLayoutProperty('track-segments-line', 'visibility', showFull ? 'none' : 'visible');
   }
 
