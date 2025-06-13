@@ -128,35 +128,32 @@ class GPXViewer extends HTMLElement {
         .sidebar { 
           width: 380px;
           height: 100%; 
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          color: white;
+          background: #ffffff;
+          color: #333;
           overflow-y: auto; 
           position: relative;
-          box-shadow: -4px 0 20px rgba(0,0,0,0.15);
+          border-left: 1px solid #e0e0e0;
         }
         
         .sidebar-header {
-          background: rgba(255,255,255,0.1);
-          padding: 20px 20px 16px 20px;
-          border-bottom: 1px solid rgba(255,255,255,0.2);
-          backdrop-filter: blur(10px);
-          position: sticky;
-          top: 0;
-          z-index: 5;
+          background: #f8f9fa;
+          padding: 16px 20px;
+          border-bottom: 1px solid #e0e0e0;
         }
         
         .sidebar-title {
-          font-size: 1.4em;
+          font-size: 1.2em;
           font-weight: 600;
-          margin-bottom: 8px;
+          margin-bottom: 4px;
           display: flex;
           align-items: center;
           justify-content: space-between;
+          color: #333;
         }
         
         .sidebar-subtitle {
-          font-size: 0.9em;
-          opacity: 0.8;
+          font-size: 0.85em;
+          color: #666;
           line-height: 1.4;
         }
         
@@ -165,174 +162,171 @@ class GPXViewer extends HTMLElement {
         }
         
         .segment-item {
-          background: rgba(255,255,255,0.05);
-          margin: 8px 16px;
-          border-radius: 12px;
-          padding: 16px;
+          background: #fff;
+          margin: 4px 12px;
+          border: 1px solid #e0e0e0;
+          border-radius: 6px;
+          padding: 12px;
           cursor: pointer;
-          transition: all 0.2s ease;
-          border: 2px solid transparent;
+          transition: all 0.15s ease;
         }
         
         .segment-item:hover {
-          background: rgba(255,255,255,0.1);
-          transform: translateY(-1px);
-          box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+          background: #f5f5f5;
+          border-color: #ccc;
         }
         
         .segment-item.active {
-          background: rgba(255,255,255,0.15);
-          border-color: rgba(255,255,255,0.3);
-          box-shadow: 0 6px 16px rgba(0,0,0,0.15);
+          background: #e3f2fd;
+          border-color: #2196f3;
         }
         
         .segment-header {
           display: flex;
           align-items: center;
-          margin-bottom: 12px;
+          margin-bottom: 8px;
         }
         
         .segment-checkbox {
-          margin-right: 12px;
-          width: 18px;
-          height: 18px;
-          accent-color: #fff;
+          margin-right: 10px;
+          width: 16px;
+          height: 16px;
         }
         
         .segment-title {
-          font-weight: 600;
-          font-size: 1.05em;
+          font-weight: 500;
+          font-size: 0.95em;
           flex: 1;
+          color: #333;
         }
         
         .segment-type {
-          background: rgba(255,255,255,0.2);
-          color: #ff9999;
-          padding: 4px 10px;
-          border-radius: 8px;
-          font-size: 0.8em;
+          background: #f0f0f0;
+          color: #666;
+          padding: 2px 8px;
+          border-radius: 4px;
+          font-size: 0.75em;
           font-weight: 500;
         }
         
         .segment-type.stop {
-          background: rgba(255, 107, 107, 0.2);
-          color: #ff6b6b;
+          background: #ffebee;
+          color: #c62828;
         }
         
         .segment-type.move {
-          background: rgba(76, 175, 80, 0.2);
-          color: #4caf50;
+          background: #e8f5e8;
+          color: #2e7d32;
         }
         
         .segment-details {
-          font-size: 0.9em;
-          opacity: 0.9;
+          font-size: 0.85em;
+          color: #555;
           line-height: 1.4;
         }
         
         .segment-time {
-          margin-bottom: 10px;
-          font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
-          background: rgba(255,255,255,0.08);
-          padding: 8px 10px;
-          border-radius: 6px;
-          font-size: 0.85em;
+          margin-bottom: 8px;
+          font-family: 'SF Mono', Monaco, monospace;
+          background: #f8f9fa;
+          padding: 6px 8px;
+          border-radius: 4px;
+          font-size: 0.8em;
+          color: #555;
         }
         
         .segment-stats {
           display: grid;
           grid-template-columns: 1fr 1fr 1fr;
-          gap: 8px;
-          margin-top: 10px;
+          gap: 6px;
+          margin-top: 8px;
         }
         
         .stat-item {
           text-align: center;
-          background: rgba(255,255,255,0.1);
-          padding: 8px 6px;
-          border-radius: 8px;
+          background: #f8f9fa;
+          padding: 6px 4px;
+          border-radius: 4px;
+          border: 1px solid #e0e0e0;
         }
         
         .stat-label {
           font-size: 0.7em;
-          opacity: 0.7;
-          margin-bottom: 3px;
+          color: #666;
+          margin-bottom: 2px;
           text-transform: uppercase;
-          letter-spacing: 0.5px;
+          letter-spacing: 0.3px;
         }
         
         .stat-value {
-          font-weight: 600;
-          font-size: 0.9em;
+          font-weight: 500;
+          font-size: 0.85em;
+          color: #333;
         }
         
         .sidebar-actions {
-          padding: 16px 20px;
-          border-top: 1px solid rgba(255,255,255,0.2);
-          background: rgba(255,255,255,0.05);
-          position: sticky;
-          bottom: 0;
+          padding: 12px 16px;
+          border-top: 1px solid #e0e0e0;
+          background: #f8f9fa;
         }
         
         .btn {
-          background: rgba(255,255,255,0.2);
-          color: white;
-          border: 1px solid rgba(255,255,255,0.3);
-          padding: 10px 16px;
-          border-radius: 8px;
+          background: #fff;
+          color: #333;
+          border: 1px solid #ccc;
+          padding: 8px 16px;
+          border-radius: 6px;
           cursor: pointer;
           font-size: 0.9em;
           font-weight: 500;
-          transition: all 0.2s ease;
-          backdrop-filter: blur(10px);
+          transition: all 0.15s ease;
           width: 100%;
         }
         
         .btn:hover {
-          background: rgba(255,255,255,0.3);
-          transform: translateY(-1px);
-          box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+          background: #f5f5f5;
+          border-color: #999;
         }
         
         .btn-close {
           background: transparent;
           border: none;
-          color: white;
-          font-size: 1.3em;
+          color: #666;
+          font-size: 1.1em;
           cursor: pointer;
           padding: 4px 8px;
-          border-radius: 6px;
-          transition: all 0.2s ease;
+          border-radius: 4px;
+          transition: all 0.15s ease;
         }
         
         .btn-close:hover {
-          background: rgba(255,255,255,0.2);
-          transform: rotate(90deg);
+          background: #f0f0f0;
+          color: #333;
         }
         
         .sidebar-toggle {
           position: absolute;
           top: 20px;
           right: 20px;
-          width: 50px;
-          height: 50px;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          color: white;
-          border: none;
-          border-radius: 12px;
+          width: 44px;
+          height: 44px;
+          background: #fff;
+          color: #333;
+          border: 1px solid #ccc;
+          border-radius: 8px;
           cursor: pointer;
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 1.2em;
+          font-size: 1.1em;
           z-index: 15;
-          box-shadow: 0 4px 16px rgba(102, 126, 234, 0.3);
-          transition: all 0.3s ease;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+          transition: all 0.2s ease;
         }
         
         .sidebar-toggle:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+          background: #f5f5f5;
+          border-color: #999;
         }
         
         .sidebar-toggle.hidden {
@@ -415,10 +409,11 @@ class GPXViewer extends HTMLElement {
             margin-left: 6px; 
           }
           .sidebar-toggle { 
-            width: 44px; 
-            height: 44px; 
-            top: 16px; 
-            right: 16px; 
+            width: 40px;
+            height: 40px;
+            top: 10px;
+            right: 10px;
+            font-size: 1em;
           }
         }
         
@@ -435,20 +430,20 @@ class GPXViewer extends HTMLElement {
         <div class="map-container no-track">
           <div class="map"></div>
           <div class="drop-prompt">请拖放 GPX 文件到地图区域<br>或点击此处选择文件</div>
-          <button class="sidebar-toggle hidden" title="显示侧边栏">📊</button>
+          <button class="sidebar-toggle hidden" title="显示侧边栏">☰</button>
         </div>
         <div class="sidebar-container">
           <div class="sidebar">
             <div class="sidebar-header">
               <div class="sidebar-title">
-                <span>📍 路径分段</span>
+                <span>轨迹分段</span>
                 <button class="btn-close" title="关闭侧边栏">✕</button>
               </div>
-              <div class="sidebar-subtitle">选择分段查看轨迹详情，支持多选组合</div>
+              <div class="sidebar-subtitle">选择分段查看轨迹</div>
             </div>
             <div class="sidebar-content"></div>
             <div class="sidebar-actions">
-              <button class="btn" id="reset-segments">🔄 重置所有分段</button>
+              <button class="btn" id="reset-segments">重置选择</button>
             </div>
           </div>
         </div>
@@ -531,6 +526,25 @@ class GPXViewer extends HTMLElement {
         if (this._currentPoints.length === 0) this._dropPromptMessage.textContent = "请拖放 GPX 文件到地图区域\n或点击此处选择文件"; 
       } 
     });
+
+    // 监听窗口大小变化，在移动设备和桌面设备之间切换时调整侧边栏状态
+    window.addEventListener('resize', () => {
+      if (this._currentSegments && this._currentSegments.length > 0) {
+        const sidebarExpanded = this._sidebarContainer && this._sidebarContainer.classList.contains('expanded');
+        if (this._isMobile() && sidebarExpanded) {
+          // 切换到移动设备时关闭侧边栏
+          this._hideSidebar();
+        } else if (!this._isMobile() && !sidebarExpanded) {
+          // 切换到桌面设备时打开侧边栏
+          this._showSidebar();
+        }
+      }
+    });
+  }
+
+  // 检测是否为移动设备
+  _isMobile() {
+    return window.innerWidth <= 768;
   }
 
   // 显示侧边栏
@@ -974,9 +988,14 @@ class GPXViewer extends HTMLElement {
     }
     // 渲染SVG进度条
     this._renderTrackProgressBar();
-    // 渲染侧边栏并显示
+    // 渲染侧边栏，桌面设备自动显示，移动设备需要手动打开
     this._renderSidebar();
-    this._showSidebar();
+    if (!this._isMobile()) {
+      this._showSidebar();
+    } else {
+      // 移动设备上确保侧边栏隐藏，按钮显示
+      this._hideSidebar();
+    }
   }
 
   // 更新地图当前点和已走轨迹（只用可见分段）
@@ -1628,8 +1647,7 @@ class GPXViewer extends HTMLElement {
       const dist = seg.distance ? (seg.distance / 1000).toFixed(2) : '--';
       const dur = seg.duration ? Math.round(seg.duration / 60) : 0;
       const durText = dur > 0 ? (dur < 60 ? `${dur}分` : `${Math.floor(dur/60)}时${dur%60}分`) : '--';
-      
-      const typeIcon = seg.type === 'stop' ? '⏸️' : '🚶';
+
       const typeLabel = seg.type === 'stop' ? '静止' : '移动';
       const typeClass = seg.type === 'stop' ? 'stop' : 'move';
 
@@ -1640,18 +1658,17 @@ class GPXViewer extends HTMLElement {
       segmentEl.innerHTML = `
         <div class="segment-header">
           <input type="checkbox" class="segment-checkbox" ${checked ? 'checked' : ''}>
-          <div class="segment-title">第${idx + 1}段</div>
-          <div class="segment-type ${typeClass}">${typeIcon} ${typeLabel}</div>
+          <div class="segment-title">分段 ${idx + 1}</div>
+          <div class="segment-type ${typeClass}">${typeLabel}</div>
         </div>
         <div class="segment-details">
           <div class="segment-time">
-            ${startDate === endDate ? startDate : `${startDate} ~`}<br>
             ${startTime} - ${endTime}
           </div>
           <div class="segment-stats">
             <div class="stat-item">
               <div class="stat-label">距离</div>
-              <div class="stat-value">${dist} km</div>
+              <div class="stat-value">${dist}km</div>
             </div>
             <div class="stat-item">
               <div class="stat-label">时长</div>
@@ -1659,7 +1676,7 @@ class GPXViewer extends HTMLElement {
             </div>
             <div class="stat-item">
               <div class="stat-label">均速</div>
-              <div class="stat-value">${speed} km/h</div>
+              <div class="stat-value">${speed}</div>
             </div>
           </div>
         </div>
