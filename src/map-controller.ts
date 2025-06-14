@@ -1,6 +1,6 @@
 // map-controller.ts - 地图相关功能
 
-import maplibregl from 'maplibre-gl';
+// maplibre-gl 通过全局变量加载，不使用模块导入
 import './maplibre-extensions.d'; // 导入类型扩展
 import { TrackPoint, StopSegment, TrackSegment, ColorMode } from './types';
 import { calculateBearing, calculateDistance, turboColormap } from './utils';

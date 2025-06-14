@@ -40,6 +40,9 @@ export default defineConfig(({ mode }) => {
             globals: {
               'maplibre-gl': 'maplibregl'
             },
+            paths: {
+              'maplibre-gl': 'https://cdn.jsdelivr.net/npm/maplibre-gl@5.6.0/dist/maplibre-gl.min.js'
+            },
             assetFileNames: 'styles.[ext]'
           }
         }
