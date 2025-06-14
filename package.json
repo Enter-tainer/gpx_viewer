@@ -37,6 +37,7 @@
   "devDependencies": {
     "@types/geojson": "^7946.0.16",
     "@types/maplibre-gl": "^1.13.2",
+    "@types/node": "^24.0.1",
     "typescript": "^5.8.3",
     "vite": "^6.3.5"
   }

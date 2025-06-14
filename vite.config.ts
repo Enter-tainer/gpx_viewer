@@ -4,8 +4,13 @@ import * as path from 'path';
 
 // 创建并导出配置，根据命令行参数选择不同的构建目标
 export default defineConfig(({ mode }) => {
+  // 获取仓库名称用于子路径设置
+  const repoName = process.env.GITHUB_REPOSITORY ? process.env.GITHUB_REPOSITORY.split('/')[1] : '';
+  const base = process.env.GITHUB_REPOSITORY ? `/${repoName}/` : '/';
+  
   // 默认配置
   const baseConfig = {
+    base,
     resolve: {
       alias: {
         '@': resolve(path.dirname(''), 'src')
@@ -52,10 +57,14 @@ export default defineConfig(({ mode }) => {
           input: {
             main: resolve(path.dirname(''), 'index.html')
           },
+          external: ['maplibre-gl'],
           output: {
             entryFileNames: 'gpx-viewer.js',
             chunkFileNames: '[name].js',
-            assetFileNames: '[name].[ext]'
+            assetFileNames: '[name].[ext]',
+            globals: {
+              'maplibre-gl': 'maplibregl'
+            }
           }
         },
         cssCodeSplit: false
