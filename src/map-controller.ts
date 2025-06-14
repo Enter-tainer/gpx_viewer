@@ -976,13 +976,28 @@ export class MapController {
    * 切换分段可见性
    */
   toggleSegmentVisibility(index: number): void {
-    if (!this.segmentVisibility || !this.currentSegments) return;
+    if (!this.segmentVisibility || !this.currentSegments || !this.map) return;
     
     this.segmentVisibility[index] = !this.segmentVisibility[index];
     this.updateTrackSegmentsLayer();
     
-    // 自动缩放到当前可见轨迹
-    this.fitMapToVisibleTrack();
+    // 获取当前可见轨迹点
+    const pts = this.getVisibleTrackPoints();
+    if (!pts || pts.length === 0) return;
+    
+    const bounds = new maplibregl.LngLatBounds();
+    pts.forEach(p => bounds.extend([p.longitude, p.latitude]));
+    
+    if (!bounds.isEmpty()) {
+      // 最大缩放级别限制（侧边栏点击分段时应用）
+      const MAX_ZOOM_LEVEL = 16;
+      
+      // 缩放到可见轨迹，但限制最大缩放级别
+      this.map.fitBounds(bounds, { 
+        padding: 60,
+        maxZoom: MAX_ZOOM_LEVEL
+      });
+    }
   }
 
   /**
