@@ -1,0 +1,58 @@
+name: 构建并部署到 GitHub Pages
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+# 设置GITHUB_TOKEN的权限以允许部署到GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 允许同时只有一个部署作业运行，但不会取消正在进行的运行
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  # 构建作业
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 构建项目
+        run: npm run build:demo
+
+      - name: 设置 Pages
+        uses: actions/configure-pages@v4
+
+      - name: 上传构建产物
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: './dist'
+
+  # 部署作业
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: 部署到 GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4 
