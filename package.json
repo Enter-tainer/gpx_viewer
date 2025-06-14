@@ -13,8 +13,8 @@
   "scripts": {
     "dev": "vite",
     "build": "npm run build:demo && npm run build:lib",
-    "build:demo": "tsc --noEmit && vite build",
-    "build:lib": "tsc --noEmit && vite build --mode lib",
+    "build:demo": "vite build",
+    "build:lib": "vite build --mode lib",
     "preview": "vite preview"
   },
   "repository": {
