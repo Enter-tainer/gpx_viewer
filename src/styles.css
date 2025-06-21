@@ -1,3 +1,5 @@
+/* 导入 MapLibre GL CSS 样式 */
+@import url('https://cdn.jsdelivr.net/npm/maplibre-gl@5.6.0/dist/maplibre-gl.min.css');
 /* gpx-viewer 组件样式 */
 
 :host { 
@@ -428,3 +430,4 @@
     width: 100%; 
   }
 }
+
