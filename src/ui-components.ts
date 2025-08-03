@@ -139,11 +139,14 @@ export function renderTrackProgressBar(
   // 速度文本（SVG外部div，便于响应式）
   let speedDiv = document.createElement('div');
   speedDiv.style.textAlign = 'center';
-  speedDiv.style.fontSize = isMobile ? '18px' : '16px';
+  speedDiv.style.fontSize = isMobile ? '15px' : '14px';
   speedDiv.style.fontWeight = 'bold';
   speedDiv.style.marginBottom = isMobile ? '2px' : '4px';
   speedDiv.style.color = '#1976d2';
   speedDiv.style.fontFamily = 'monospace';
+  speedDiv.style.whiteSpace = 'nowrap';
+  speedDiv.style.overflow = 'hidden';
+  speedDiv.style.textOverflow = 'ellipsis';
   container.appendChild(speedDiv);
   
   const drawCursor = (idx: number) => {
@@ -193,11 +196,39 @@ export function renderTrackProgressBar(
     const dist = R * c; // 距离（米）
     
     let v = (dist / 1000) / (dt / 3600); // m/s -> km/h
-    return `速度：${v.toFixed(2)} km/h`;
+    return `${v.toFixed(2)}`;
   };
   
+  // 累计距离计算函数
+  const getCumulativeDistance = (idx: number): string => {
+    if (idx < 0 || idx >= N || N < 2) return '0.00';
+    
+    let totalDistance = 0;
+    const R = 6371e3; // 地球半径（米）
+    
+    for (let i = 1; i <= idx; i++) {
+      const p1 = points[i - 1];
+      const p2 = points[i];
+      
+      const φ1 = p1.latitude * Math.PI / 180;
+      const φ2 = p2.latitude * Math.PI / 180;
+      const Δφ = (p2.latitude - p1.latitude) * Math.PI / 180;
+      const Δλ = (p2.longitude - p1.longitude) * Math.PI / 180;
+      
+      const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      totalDistance += R * c;
+    }
+    
+    return (totalDistance / 1000).toFixed(2);
+  };
+
   const updateSpeed = (idx: number) => {
-    speedDiv.textContent = getSpeedText(idx);
+    const speed = getSpeedText(idx);
+    const distance = getCumulativeDistance(idx);
+    speedDiv.innerHTML = `速度：${speed} km/h · 累计：${distance} km`;
   };
   
   drawCursor(currentIdx);
