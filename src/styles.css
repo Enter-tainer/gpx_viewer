@@ -2,6 +2,9 @@
 @import url('https://cdn.jsdelivr.net/npm/maplibre-gl@5.6.0/dist/maplibre-gl.min.css');
 /* gpx-viewer 组件样式 */
 
+* {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
 :host { 
   display: block; 
   position: relative; 
@@ -147,11 +150,11 @@
 
 .segment-time {
   margin-bottom: 8px;
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: ui-monospace, 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
   background: #f8f9fa;
   padding: 6px 8px;
   border-radius: 4px;
-  font-size: 0.8em;
+  font-size: 0.85em;
   color: #555;
 }
 
@@ -263,18 +266,18 @@
   bottom: 20px; 
   left: 50%; 
   transform: translateX(-50%); 
-  background: rgba(255, 255, 255, 0.2);
-  padding: 12px 24px; 
+  background: rgba(255, 255, 255, 0.25);
+    padding: 16px 24px;
   border-radius: 16px; 
   z-index: 5; 
   display: flex; 
   flex-direction: column; 
   align-items: center; 
-  gap: 10px; 
+  gap: 12px;
   box-shadow: 0 8px 32px rgba(0,0,0,0.1); 
   backdrop-filter: blur(10px);
-  border: 1px solid rgba(255,255,255,0.2);
-  min-width: 220px; 
+  border: 1px solid rgba(255, 255, 255, 0.3);
+    min-width: 240px;
   width: 80vw; 
   max-width: 700px; 
 }
@@ -285,7 +288,8 @@
   gap: 15px; 
   width: 100%; 
   justify-content: center; 
-  flex-wrap: wrap; 
+  flex-wrap: wrap;
+  margin-top: 32px;
 }
 
 .track-progress-bar { 
@@ -301,8 +305,8 @@
 }
 
 .timestamp { 
-  font-family: 'SF Mono', Monaco, monospace; 
-  font-size: 13px; 
+  font-family: ui-monospace, 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
+    font-size: 14px;
   min-width: 120px; 
   padding: 8px 12px; 
   background: #f8f9fa; 
@@ -428,6 +432,57 @@
   
   .sidebar { 
     width: 100%; 
+  }
+}
+
+#start-handle:hover {
+  stroke: #b02a37;
+}
+
+#end-handle:hover {
+  stroke: #1e7e34;
+}
+
+/* 灰色遮罩样式 */
+.maplibregl-map .dim-range-line {
+  filter: none;
+}
+
+/* 进度条容器额外样式 */
+.track-progress-bar {
+  position: relative;
+}
+
+.track-progress-bar svg {
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.track-stats {
+  text-align: center;
+  font-size: 14px;
+  margin-top: 8px;
+  color: #444;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 4px 8px;
+  letter-spacing: 0.3px;
+  line-height: 1.4;
+}
+
+@media (max-width: 768px) {
+  .track-stats {
+    font-size: 12px;
+    margin-top: 6px;
+    padding: 3px 6px;
+  }
+}
+
+/* 响应式调整 */
+@media (max-width: 600px) {
+  .track-progress-bar {
+    height: 110px;
   }
 }
 
