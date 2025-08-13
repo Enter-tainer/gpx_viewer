@@ -4,7 +4,7 @@
 import './maplibre-extensions.d'; // 导入类型扩展
 import { TrackPoint, StopSegment, TrackSegment, ColorMode } from './types';
 import { calculateBearing, calculateDistance, turboColormap } from './utils';
-import { calculateSpeedsWithPercentiles } from './track-parser';
+import { calculateAveragedSpeedsForColoring } from './track-parser';
 
 export class MapController {
   private map?: maplibregl.Map;
@@ -693,11 +693,11 @@ export class MapController {
         });
       }
     } else if (colorMode === 'speed') {
-      const { speeds, minV, maxV } = calculateSpeedsWithPercentiles(points);
+      const { averagedSpeeds, minV, maxV } = calculateAveragedSpeedsForColoring(points, 10);
 
       for (let i = 0; i < points.length - 1; i++) {
         const p1 = points[i], p2 = points[i + 1];
-        let norm = (maxV > minV) ? (speeds[i] - minV) / (maxV - minV) : 0;
+        let norm = (maxV > minV) ? (averagedSpeeds[i] - minV) / (maxV - minV) : 0;
 
         features.push({
           type: 'Feature',
@@ -708,7 +708,11 @@ export class MapController {
               [p2.longitude, p2.latitude, p2.altitude]
             ]
           },
-          properties: { color: turboColormap(norm) }
+          properties: {
+            color: turboColormap(norm),
+            originalSpeed: calculateDistance(p1.latitude, p1.longitude, p2.latitude, p2.longitude) /
+              Math.max(p2.timestamp - p1.timestamp, 0.001)
+          }
         });
       }
     } else if (colorMode === 'time') {
