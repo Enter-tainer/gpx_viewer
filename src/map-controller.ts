@@ -80,7 +80,8 @@ export class MapController {
     // 地图源和图层初始化
     this.map.addSource('full-track', {
       type: 'geojson',
-      data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] }, properties: {} }
+      data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] }, properties: {} },
+      tolerance: 0
     });
 
     // 添加描边图层（更宽，颜色对比）
@@ -102,7 +103,8 @@ export class MapController {
 
     this.map.addSource('highlighted-segment', {
       type: 'geojson',
-      data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] }, properties: {} }
+      data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] }, properties: {} },
+      tolerance: 0
     });
 
     this.map.addLayer({
@@ -119,7 +121,8 @@ export class MapController {
     // 已走过轨迹
     this.map.addSource('travelled-track', {
       type: 'geojson',
-      data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] }, properties: {} }
+      data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] }, properties: {} },
+      tolerance: 0
     });
 
     this.map.addLayer({
@@ -133,7 +136,8 @@ export class MapController {
     // 当前点
     this.map.addSource('current-point', {
       type: 'geojson',
-      data: { type: 'FeatureCollection', features: [] }
+      data: { type: 'FeatureCollection', features: [] },
+      tolerance: 0
     });
 
     this.map.addLayer({
@@ -146,7 +150,8 @@ export class MapController {
     // 分段轨迹
     this.map.addSource('track-segments', {
       type: 'geojson',
-      data: { type: 'FeatureCollection', features: [] }
+      data: { type: 'FeatureCollection', features: [] },
+      tolerance: 0
     });
 
     // 添加分段轨迹描边层（黑色，更宽）
@@ -1078,7 +1083,8 @@ export class MapController {
       // 左侧遮罩
       this.map.addSource('dim-left', {
         type: 'geojson',
-        data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] }, properties: {} }
+        data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] }, properties: {} },
+        tolerance: 0
       });
 
       this.map.addLayer({
@@ -1096,7 +1102,8 @@ export class MapController {
       // 右侧遮罩
       this.map.addSource('dim-right', {
         type: 'geojson',
-        data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] }, properties: {} }
+        data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] }, properties: {} },
+        tolerance: 0
       });
 
       this.map.addLayer({
