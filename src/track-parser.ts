@@ -288,7 +288,7 @@ export function calculateSpeedsWithPercentiles(
   minSegmentLengthMeters: number = SPEED_COLOR_MIN_SEGMENT_LENGTH_M
 ) {
   if (!points || points.length < 2) {
-    return { speeds: [], minV: 0, maxV: 0 };
+    return { speeds: [], minV: 0, maxV: 0, rawMin: 0, rawMax: 0 };
   }
 
   const numSegments = points.length - 1;
@@ -296,6 +296,9 @@ export function calculateSpeedsWithPercentiles(
   const segmentDistances = new Array<number>(numSegments);
   const segmentDurations = new Array<number>(numSegments);
   const speeds: number[] = new Array<number>(numSegments);
+
+  let rawMin = Number.POSITIVE_INFINITY;
+  let rawMax = Number.NEGATIVE_INFINITY;
 
   for (let i = 0; i < numSegments; i++) {
     const p1 = points[i];
@@ -324,6 +327,8 @@ export function calculateSpeedsWithPercentiles(
 
     if (threshold <= 0 || currentDistance >= threshold) {
       speeds[i] = currentDuration > 0 ? currentDistance / currentDuration : 0;
+      rawMin = Math.min(rawMin, speeds[i]);
+      rawMax = Math.max(rawMax, speeds[i]);
       continue;
     }
 
@@ -334,7 +339,13 @@ export function calculateSpeedsWithPercentiles(
     } else {
       speeds[i] = windowDistance / windowDuration;
     }
+
+    rawMin = Math.min(rawMin, speeds[i]);
+    rawMax = Math.max(rawMax, speeds[i]);
   }
+
+  if (!isFinite(rawMin)) rawMin = 0;
+  if (!isFinite(rawMax)) rawMax = 0;
 
   // 使用 p99 和 p1 作为 min 和 max
   const sortedSpeeds = [...speeds].sort((a, b) => a - b);
@@ -343,5 +354,5 @@ export function calculateSpeedsWithPercentiles(
   const minV = sortedSpeeds[p1Index] || 0;
   const maxV = sortedSpeeds[p99Index] || 0;
 
-  return { speeds, minV, maxV };
+  return { speeds, minV, maxV, rawMin, rawMax };
 }

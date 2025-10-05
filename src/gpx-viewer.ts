@@ -16,6 +16,7 @@ export class GPXViewer extends HTMLElement {
   private _segmentVisibility: boolean[] = [];
   private _currentColorMode: ColorMode = 'speed';
   private _mapLoaded: boolean = false;
+  private _useSegmentSpeedNormalization = false;
 
   // DOM 元素
   private _mapContainer?: HTMLElement;
@@ -29,6 +30,7 @@ export class GPXViewer extends HTMLElement {
   private _fileInput?: HTMLInputElement;
   private _colorModeSelect?: HTMLSelectElement;
   private _progressBarContainer?: HTMLElement;
+  private _speedNormalizationCheckbox?: HTMLInputElement;
 
   constructor() {
     super();
@@ -134,10 +136,14 @@ export class GPXViewer extends HTMLElement {
               </div>
               <div class="sidebar-subtitle">选择分段查看轨迹</div>
             </div>
-            <div class="sidebar-content"></div>
-            <div class="sidebar-actions">
+            <div class="sidebar-controls">
+              <label class="sidebar-option" title="勾选后，每个分段单独归一化速度色带">
+                <input type="checkbox" class="speed-normalization-checkbox">
+                分段归一化着色
+              </label>
               <button class="btn" id="reset-segments">重置选择</button>
             </div>
+            <div class="sidebar-content"></div>
           </div>
         </div>
       </div>
@@ -168,6 +174,7 @@ export class GPXViewer extends HTMLElement {
     this._fileInput = this.shadowRoot.querySelector('.file-input') as HTMLInputElement;
     this._colorModeSelect = this.shadowRoot.querySelector('.color-mode-select') as HTMLSelectElement;
     this._progressBarContainer = this.shadowRoot.querySelector('.track-progress-bar') as HTMLElement;
+    this._speedNormalizationCheckbox = this.shadowRoot.querySelector('.speed-normalization-checkbox') as HTMLInputElement;
 
     // 事件绑定
     this._colorModeSelect?.addEventListener('change', () => {
@@ -180,6 +187,16 @@ export class GPXViewer extends HTMLElement {
 
         this._renderTrackProgressBar();
       }
+    });
+
+    this._speedNormalizationCheckbox?.addEventListener('change', () => {
+      this._useSegmentSpeedNormalization = !!this._speedNormalizationCheckbox?.checked;
+
+      if (this._mapController) {
+        this._mapController.setUseSegmentSpeedNormalization(this._useSegmentSpeedNormalization);
+      }
+
+      this._renderTrackProgressBar();
     });
 
     this._dropPromptMessage.addEventListener('click', () => this._fileInput!.click());
@@ -286,6 +303,7 @@ export class GPXViewer extends HTMLElement {
     if (!this._mapContainer) return;
 
     this._mapController = new MapController(this._mapContainer);
+    this._mapController.setUseSegmentSpeedNormalization(this._useSegmentSpeedNormalization);
 
     try {
       await this._mapController.initMap();
@@ -439,6 +457,15 @@ export class GPXViewer extends HTMLElement {
 
     const visiblePoints = this._mapController.getVisibleTrackPoints();
 
+    const speedColoringConfig = this._currentColorMode === 'speed'
+      ? {
+          useSegmentSpeedNormalization: this._useSegmentSpeedNormalization,
+          globalSpeedRange: this._useSegmentSpeedNormalization
+            ? null
+            : this._mapController.getGlobalSpeedRange()
+        }
+      : undefined;
+
     renderTrackProgressBar(
       this._progressBarContainer,
       visiblePoints,
@@ -507,7 +534,8 @@ export class GPXViewer extends HTMLElement {
           // 清除高亮
           this._mapController.clearRangeHighlight();
         }
-      }
+      },
+      speedColoringConfig
     );
   }
 

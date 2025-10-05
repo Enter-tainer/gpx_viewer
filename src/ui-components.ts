@@ -4,12 +4,18 @@ import { TrackPoint, TrackSegment, ColorMode } from './types';
 import { turboColormap } from './utils';
 import { calculateSpeedsWithPercentiles } from './track-parser';
 
+interface SpeedColoringConfig {
+  useSegmentSpeedNormalization: boolean;
+  globalSpeedRange?: { min: number; max: number } | null;
+}
+
 // 渲染轨迹进度条（SVG）——双滑块范围选择器
 export function renderTrackProgressBar(
   container: HTMLElement,
   points: TrackPoint[],
   colorMode: ColorMode,
-  rangeCallback: (startIndex: number, endIndex: number) => void
+  rangeCallback: (startIndex: number, endIndex: number) => void,
+  speedColoring?: SpeedColoringConfig
 ): void {
   container.innerHTML = '';
 
@@ -50,8 +56,20 @@ export function renderTrackProgressBar(
   if (colorMode === 'speed') {
     const speedData = calculateSpeedsWithPercentiles(points);
     speeds = speedData.speeds;
-    minV = speedData.minV;
-    maxV = speedData.maxV;
+
+    const useSegmentRange = speedColoring?.useSegmentSpeedNormalization;
+    const globalRange = speedColoring?.globalSpeedRange || null;
+
+    if (useSegmentRange) {
+      minV = speedData.minV;
+      maxV = speedData.maxV;
+    } else if (globalRange && globalRange.max > globalRange.min) {
+      minV = globalRange.min;
+      maxV = globalRange.max;
+    } else {
+      minV = speedData.minV;
+      maxV = speedData.maxV;
+    }
   }
 
   for (let i = 0; i < N - 1; i++) {
@@ -61,6 +79,8 @@ export function renderTrackProgressBar(
     let color = '#007bff';
     if (colorMode === 'speed') {
       let norm = (maxV > minV) ? (speeds[i] - minV) / (maxV - minV) : 0;
+      if (!Number.isFinite(norm)) norm = 0;
+      norm = Math.max(0, Math.min(1, norm));
       color = turboColormap(norm);
     } else if (colorMode === 'time') {
       let norm = (points[i].timestamp - points[0].timestamp) / (points[N - 1].timestamp - points[0].timestamp);

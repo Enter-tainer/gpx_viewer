@@ -14,6 +14,8 @@ export class MapController {
   private segmentVisibility: boolean[] = [];
   private currentStops: StopSegment[] = [];
   private currentColorMode: ColorMode = 'speed';
+  private useSegmentSpeedNormalization = false;
+  private fullTrackSpeedStats: ReturnType<typeof calculateSpeedsWithPercentiles> | null = null;
   // Flag to track if MapLibre is loaded
 
   constructor(mapContainer: HTMLElement) {
@@ -490,6 +492,7 @@ export class MapController {
     this.currentSegments = segments;
     this.currentStops = stops;
     this.segmentVisibility = segments.map(() => false); // 默认全未选中
+    this.fullTrackSpeedStats = calculateSpeedsWithPercentiles(points);
 
     // 设置轨迹 GeoJSON
     if (points.length > 0) {
@@ -698,11 +701,26 @@ export class MapController {
         });
       }
     } else if (colorMode === 'speed') {
-      const { speeds, minV, maxV } = calculateSpeedsWithPercentiles(points);
+      const { speeds, minV: localMin, maxV: localMax } = calculateSpeedsWithPercentiles(points);
+
+      let minV = localMin;
+      let maxV = localMax;
+
+      if (!this.useSegmentSpeedNormalization && this.fullTrackSpeedStats) {
+        minV = this.fullTrackSpeedStats.minV;
+        maxV = this.fullTrackSpeedStats.maxV;
+      }
+
+      if (!(maxV > minV)) {
+        minV = localMin;
+        maxV = localMax;
+      }
 
       for (let i = 0; i < points.length - 1; i++) {
         const p1 = points[i], p2 = points[i + 1];
         let norm = (maxV > minV) ? (speeds[i] - minV) / (maxV - minV) : 0;
+        if (!Number.isFinite(norm)) norm = 0;
+        norm = Math.max(0, Math.min(1, norm));
 
         features.push({
           type: 'Feature',
@@ -738,6 +756,27 @@ export class MapController {
     }
 
     return { type: 'FeatureCollection', features };
+  }
+
+  setUseSegmentSpeedNormalization(value: boolean): void {
+    this.useSegmentSpeedNormalization = value;
+    this.updateTrackSegmentsLayer();
+  }
+
+  getUseSegmentSpeedNormalization(): boolean {
+    return this.useSegmentSpeedNormalization;
+  }
+
+  getGlobalSpeedRange(): { min: number; max: number } | null {
+    if (!this.fullTrackSpeedStats) return null;
+
+    const { minV, maxV } = this.fullTrackSpeedStats;
+
+    if (maxV > minV) {
+      return { min: minV, max: maxV };
+    }
+
+    return null;
   }
 
   /**
@@ -1049,6 +1088,8 @@ export class MapController {
       type: 'FeatureCollection',
       features: []
     });
+
+    this.fullTrackSpeedStats = null;
 
     this.updateMapForIndex(0);
   }
