@@ -11,6 +11,9 @@ export const STOP_SPEED_THRESHOLD_KMPH = 3; // km/h
 export const STOP_MIN_DURATION_SEC = 60; // 静止区段最小持续时间（秒）
 export const STOP_MAX_DISPLACEMENT_M = 30; // 静止区段最大位移（米）
 
+// 速度着色时，单段超过该距离则直接使用单段速度；否则使用回溯窗口
+export const SPEED_COLOR_MIN_SEGMENT_LENGTH_M = 10;
+
 /**
  * 解析GPX字符串为原始轨迹数据
  */
@@ -280,18 +283,57 @@ export function splitTrackByStops(points: TrackPoint[], stops: StopSegment[]): T
 /**
  * 计算轨迹点速度并返回统计值（含百分位数）
  */
-export function calculateSpeedsWithPercentiles(points: TrackPoint[]) {
+export function calculateSpeedsWithPercentiles(
+  points: TrackPoint[],
+  minSegmentLengthMeters: number = SPEED_COLOR_MIN_SEGMENT_LENGTH_M
+) {
   if (!points || points.length < 2) {
     return { speeds: [], minV: 0, maxV: 0 };
   }
 
-  const speeds: number[] = [];
-  for (let i = 0; i < points.length - 1; i++) {
-    const p1 = points[i], p2 = points[i + 1];
-    const dt = p2.timestamp - p1.timestamp;
-    const dist = calculateDistance(p1.latitude, p1.longitude, p2.latitude, p2.longitude);
-    let v = (dt > 0) ? (dist / dt) : 0;
-    speeds.push(v);
+  const numSegments = points.length - 1;
+  const threshold = Math.max(minSegmentLengthMeters, 0);
+  const segmentDistances = new Array<number>(numSegments);
+  const segmentDurations = new Array<number>(numSegments);
+  const speeds: number[] = new Array<number>(numSegments);
+
+  for (let i = 0; i < numSegments; i++) {
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    segmentDurations[i] = p2.timestamp - p1.timestamp;
+    segmentDistances[i] = calculateDistance(p1.latitude, p1.longitude, p2.latitude, p2.longitude);
+  }
+
+  let windowDistance = 0;
+  let windowStart = 0;
+
+  for (let i = 0; i < numSegments; i++) {
+    windowDistance += segmentDistances[i];
+
+    // 维持最小窗口，保证距离阈值被满足（若可能）
+    while (
+      windowStart < i &&
+      windowDistance - segmentDistances[windowStart] >= threshold
+    ) {
+      windowDistance -= segmentDistances[windowStart];
+      windowStart++;
+    }
+
+    const currentDistance = segmentDistances[i];
+    const currentDuration = segmentDurations[i];
+
+    if (threshold <= 0 || currentDistance >= threshold) {
+      speeds[i] = currentDuration > 0 ? currentDistance / currentDuration : 0;
+      continue;
+    }
+
+    const windowDuration = points[i + 1].timestamp - points[windowStart].timestamp;
+
+    if (windowDistance <= 0 || windowDuration <= 0) {
+      speeds[i] = 0;
+    } else {
+      speeds[i] = windowDistance / windowDuration;
+    }
   }
 
   // 使用 p99 和 p1 作为 min 和 max
