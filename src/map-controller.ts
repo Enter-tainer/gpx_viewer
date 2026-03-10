@@ -5,6 +5,15 @@ import './maplibre-extensions.d'; // 导入类型扩展
 import { TrackPoint, StopSegment, TrackSegment, ColorMode } from './types';
 import { calculateBearing, calculateDistance, turboColormap } from './utils';
 import { calculateSpeedsWithPercentiles } from './track-parser';
+import mlcontour from 'maplibre-contour';
+
+const MAPTERHORN_DEM_SOURCE_ID = 'mapterhorn-dem-source';
+const MAPTERHORN_HILLSHADE_LAYER_ID = 'mapterhorn-hillshade-layer';
+const MAPTERHORN_CONTOUR_SOURCE_ID = 'mapterhorn-contour-source';
+const MAPTERHORN_CONTOUR_LINE_LAYER_ID = 'mapterhorn-contour-line-layer';
+const MAPTERHORN_CONTOUR_LABEL_LAYER_ID = 'mapterhorn-contour-label-layer';
+const MAPTERHORN_DEM_TILEJSON_URL = 'https://tiles.mapterhorn.com/tilejson.json';
+const MAPTERHORN_TERRARIUM_TILES = 'https://tiles.mapterhorn.com/{z}/{x}/{y}.webp';
 
 export class MapController {
   private map?: maplibregl.Map;
@@ -16,6 +25,7 @@ export class MapController {
   private currentColorMode: ColorMode = 'speed';
   private useSegmentSpeedNormalization = false;
   private fullTrackSpeedStats: ReturnType<typeof calculateSpeedsWithPercentiles> | null = null;
+  private contourDemSource?: InstanceType<typeof mlcontour.DemSource>;
   // Flag to track if MapLibre is loaded
 
   constructor(mapContainer: HTMLElement) {
@@ -63,9 +73,9 @@ export class MapController {
         const mapError = e.error as { status?: number, message?: string };
         const url = (e as any).url; // Cast to any to access potentially undefined url property
         if (mapError && mapError.status === 403 && url && typeof url === 'string' && url.includes('openfreemap.org')) {
-          alert("无法加载 OpenFreeMap 瓦片。请检查网络连接或瓦片服务状态。");
+          console.error("无法加载 OpenFreeMap 瓦片。请检查网络连接或瓦片服务状态。");
         } else if (mapError) {
-          alert("加载地图时出错：" + (mapError.message || "未知错误"));
+          console.error("加载地图时出错：" + (mapError.message || "未知错误"));
         }
       });
 
@@ -78,6 +88,8 @@ export class MapController {
    */
   private onMapLoaded(): void {
     if (!this.map) return;
+
+    this.initTopographyLayers();
 
     // 地图源和图层初始化
     this.map.addSource('full-track', {
@@ -187,6 +199,131 @@ export class MapController {
   /**
    * 初始化方向箭头图标
    */
+  private initTopographyLayers(): void {
+    if (!this.map) return;
+    this.getOrCreateContourDemSource();
+
+    if (!this.map.getSource(MAPTERHORN_DEM_SOURCE_ID)) {
+      this.map.addSource(MAPTERHORN_DEM_SOURCE_ID, {
+        type: 'raster-dem',
+        url: MAPTERHORN_DEM_TILEJSON_URL
+      } as maplibregl.RasterDEMSourceSpecification);
+    }
+
+    this.addOverlayLayer({
+      id: MAPTERHORN_HILLSHADE_LAYER_ID,
+      type: 'hillshade',
+      source: MAPTERHORN_DEM_SOURCE_ID,
+      paint: {
+        'hillshade-shadow-color': 'rgba(20, 24, 36, 0.34)',
+        'hillshade-highlight-color': 'rgba(255, 255, 255, 0.28)',
+        'hillshade-illumination-direction': 315,
+        'hillshade-exaggeration': 0.26
+      }
+    } as maplibregl.HillshadeLayerSpecification);
+
+    this.initContourLayersIfAvailable();
+  }
+
+  private getFirstSymbolLayerId(): string | undefined {
+    if (!this.map) return undefined;
+
+    const styleLayers = this.map.getStyle()?.layers || [];
+    const firstSymbol = styleLayers.find(layer => layer.type === 'symbol');
+    return firstSymbol?.id;
+  }
+
+  private addOverlayLayer(layerConfig: maplibregl.AnyLayer): void {
+    if (!this.map) return;
+    if (this.map.getLayer(layerConfig.id)) return;
+
+    const beforeLayerId = this.getFirstSymbolLayerId();
+    if (beforeLayerId) {
+      this.map.addLayer(layerConfig, beforeLayerId);
+    } else {
+      this.map.addLayer(layerConfig);
+    }
+  }
+
+  private getOrCreateContourDemSource(): InstanceType<typeof mlcontour.DemSource> {
+    if (!this.contourDemSource) {
+      this.contourDemSource = new mlcontour.DemSource({
+        url: MAPTERHORN_TERRARIUM_TILES,
+        encoding: 'terrarium',
+        maxzoom: 13,
+        worker: true
+      });
+
+      this.contourDemSource.setupMaplibre(window.maplibregl);
+    }
+
+    return this.contourDemSource;
+  }
+
+  private initContourLayersIfAvailable(): void {
+    if (!this.map) return;
+
+    try {
+      const contourDemSource = this.getOrCreateContourDemSource();
+
+      if (!this.map.getSource(MAPTERHORN_CONTOUR_SOURCE_ID)) {
+        this.map.addSource(MAPTERHORN_CONTOUR_SOURCE_ID, {
+          type: 'vector',
+          tiles: [contourDemSource.contourProtocolUrl({
+            thresholds: {
+              9: [100, 500],
+              10: [80, 400],
+              11: [50, 250],
+              12: [25, 100],
+              13: [10, 50],
+              14: [10, 40]
+            },
+            contourLayer: 'contours',
+            elevationKey: 'ele',
+            levelKey: 'level'
+          })],
+          maxzoom: 14
+        });
+      }
+
+      this.addOverlayLayer({
+        id: MAPTERHORN_CONTOUR_LINE_LAYER_ID,
+        type: 'line',
+        source: MAPTERHORN_CONTOUR_SOURCE_ID,
+        'source-layer': 'contours',
+        minzoom: 8,
+        paint: {
+          'line-color': ['match', ['get', 'level'], 0, 'rgba(45, 56, 78, 0.28)', 'rgba(34, 44, 64, 0.44)'],
+          'line-width': ['match', ['get', 'level'], 0, 0.45, 1, 1.05, 1.35],
+          'line-opacity': ['interpolate', ['linear'], ['zoom'], 8, 0.26, 11, 0.42, 14, 0.65]
+        }
+      } as maplibregl.LineLayerSpecification);
+
+      this.addOverlayLayer({
+        id: MAPTERHORN_CONTOUR_LABEL_LAYER_ID,
+        type: 'symbol',
+        source: MAPTERHORN_CONTOUR_SOURCE_ID,
+        'source-layer': 'contours',
+        filter: ['>', ['get', 'level'], 0],
+        minzoom: 10,
+        layout: {
+          'symbol-placement': 'line',
+          'symbol-spacing': 300,
+          'text-size': 10,
+          'text-field': ['concat', ['to-string', ['get', 'ele']], ' m'],
+          'text-font': ['Noto Sans Regular']
+        },
+        paint: {
+          'text-color': 'rgba(22, 31, 48, 0.6)',
+          'text-halo-color': 'rgba(255, 255, 255, 0.82)',
+          'text-halo-width': 1.1
+        }
+      } as maplibregl.SymbolLayerSpecification);
+    } catch (error) {
+      console.warn('Failed to initialize contour layers via maplibre-contour.', error);
+    }
+  }
+
   private initArrowIcon(): void {
     if (!this.map) return;
 
